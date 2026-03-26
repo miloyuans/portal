@@ -18,6 +18,8 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_BOOTSTRAP_ADMIN_USER:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_STRICT: "false"
     ports:
       - "8081:8080"
 

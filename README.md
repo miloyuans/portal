@@ -95,6 +95,17 @@ Portal-owned public URLs can be omitted and derived automatically:
 
 Only `KEYCLOAK_PUBLIC_URL` should remain explicit, because Keycloak is usually on a different public host.
 
+For local debugging over plain HTTP or public IP without TLS:
+
+- set `KEYCLOAK_SSL_REQUIRED=NONE`
+- rerun `./scripts/keycloak-bootstrap.sh`
+
+For production:
+
+- do not use `NONE`
+- use `KEYCLOAK_SSL_REQUIRED=EXTERNAL`
+- terminate TLS in front of Keycloak and portal
+
 ## Start the full development stack
 
 ```bash

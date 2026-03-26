@@ -30,6 +30,10 @@ spec:
                 secretKeyRef:
                   name: portal-secrets
                   key: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
           ports:
             - containerPort: 8080
 ---

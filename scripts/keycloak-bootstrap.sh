@@ -16,6 +16,7 @@ fi
 : "${KEYCLOAK_OIDC_CLIENT_SECRET:=portal-api-secret}"
 : "${KEYCLOAK_ADMIN_CLIENT_ID:=portal-sync}"
 : "${KEYCLOAK_ADMIN_CLIENT_SECRET:=portal-sync-secret}"
+: "${KEYCLOAK_SSL_REQUIRED:=NONE}"
 : "${WEB_PUBLIC_URL:=http://localhost:5173}"
 : "${KEYCLOAK_REDIRECT_URL:=${WEB_PUBLIC_URL%/}/api/auth/callback}"
 
@@ -51,8 +52,18 @@ client_uuid() {
 
 ensure_realm() {
   if ! kcadm get "realms/${KEYCLOAK_REALM}" >/dev/null 2>&1; then
-    kcadm create realms -s realm="${KEYCLOAK_REALM}" -s enabled=true -s displayName="Portal Realm" >/dev/null
+    kcadm create realms \
+      -s realm="${KEYCLOAK_REALM}" \
+      -s enabled=true \
+      -s displayName="Portal Realm" \
+      -s sslRequired="${KEYCLOAK_SSL_REQUIRED}" >/dev/null
+    return
   fi
+
+  kcadm update "realms/${KEYCLOAK_REALM}" \
+    -s enabled=true \
+    -s displayName="Portal Realm" \
+    -s sslRequired="${KEYCLOAK_SSL_REQUIRED}" >/dev/null
 }
 
 ensure_realm_role() {
