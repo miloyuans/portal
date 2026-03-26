@@ -90,6 +90,10 @@ type LogConfig struct {
 func MustLoad() Config {
 	keycloakBaseURL := strings.TrimRight(getEnv("KEYCLOAK_BASE_URL", "http://localhost:8081"), "/")
 	keycloakPublicURL := strings.TrimRight(getEnv("KEYCLOAK_PUBLIC_URL", keycloakBaseURL), "/")
+	webPublicURL := strings.TrimRight(getEnv("WEB_PUBLIC_URL", "http://localhost:5173"), "/")
+	appPublicURL := strings.TrimRight(getEnv("APP_PUBLIC_URL", webPublicURL+"/api"), "/")
+	redirectURL := strings.TrimRight(getEnv("KEYCLOAK_REDIRECT_URL", webPublicURL+"/api/auth/callback"), "/")
+	postLogoutRedirectURL := strings.TrimRight(getEnv("KEYCLOAK_POST_LOGOUT_REDIRECT_URL", webPublicURL+"/login"), "/")
 
 	return Config{
 		App: AppConfig{
@@ -98,8 +102,8 @@ func MustLoad() Config {
 		},
 		Server: ServerConfig{
 			Addr:            getEnv("APP_ADDR", ":8080"),
-			PublicAPIURL:    getEnv("APP_PUBLIC_URL", "http://localhost:8080"),
-			PublicWebURL:    getEnv("WEB_PUBLIC_URL", "http://localhost:5173"),
+			PublicAPIURL:    appPublicURL,
+			PublicWebURL:    webPublicURL,
 			OpenAPIFilePath: getEnv("OPENAPI_FILE_PATH", "docs/openapi.yaml"),
 		},
 		Mongo: MongoConfig{
@@ -113,8 +117,8 @@ func MustLoad() Config {
 			Realm:                 getEnv("KEYCLOAK_REALM", "portal"),
 			OIDCClientID:          getEnv("KEYCLOAK_OIDC_CLIENT_ID", "portal-api"),
 			OIDCClientSecret:      getEnv("KEYCLOAK_OIDC_CLIENT_SECRET", "portal-api-secret"),
-			RedirectURL:           getEnv("KEYCLOAK_REDIRECT_URL", "http://localhost:8080/api/auth/callback"),
-			PostLogoutRedirectURL: getEnv("KEYCLOAK_POST_LOGOUT_REDIRECT_URL", "http://localhost:5173/login"),
+			RedirectURL:           redirectURL,
+			PostLogoutRedirectURL: postLogoutRedirectURL,
 			AdminClientID:         getEnv("KEYCLOAK_ADMIN_CLIENT_ID", "portal-sync"),
 			AdminClientSecret:     getEnv("KEYCLOAK_ADMIN_CLIENT_SECRET", "portal-sync-secret"),
 			RequestTimeout:        time.Duration(getEnvInt("SYNC_TIMEOUT_SECONDS", 10)) * time.Second,

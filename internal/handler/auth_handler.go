@@ -72,7 +72,7 @@ func (h *AuthHandler) prepareLogin(c *gin.Context) (string, error) {
 
 	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.StateCookieName, state, h.cfg.Session.StateCookieMaxAge)
 	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.NonceCookieName, nonce, h.cfg.Session.StateCookieMaxAge)
-	return h.oidc.AuthCodeURL(state, nonce), nil
+	return h.oidc.AuthCodeURL(state, nonce, callbackURL(c, h.cfg)), nil
 }
 
 // Callback handles the OIDC authorization code callback.
@@ -104,7 +104,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	tokenBundle, err := h.oidc.Exchange(c.Request.Context(), code, nonce)
+	tokenBundle, err := h.oidc.Exchange(c.Request.Context(), code, nonce, callbackURL(c, h.cfg))
 	if err != nil {
 		JSONError(c, http.StatusUnauthorized, "TOKEN_EXCHANGE_FAILED", "oidc token exchange failed", err.Error())
 		return
@@ -151,7 +151,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		slog.String("userId", sessionRecord.UserID),
 	)
 
-	c.Redirect(http.StatusFound, h.cfg.Server.PublicWebURL+"/portal")
+	c.Redirect(http.StatusFound, externalBaseURL(c, h.cfg)+"/portal")
 }
 
 // Logout deletes the portal session and returns the Keycloak logout URL.
@@ -165,9 +165,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	h.sessions.ClearCookie(c)
-	redirectURI := h.cfg.Server.PublicWebURL + "/login"
+	redirectURI := externalBaseURL(c, h.cfg) + "/login"
 	if c.Query("reason") == "expired" {
-		redirectURI = h.cfg.Server.PublicWebURL + "/session-expired"
+		redirectURI = externalBaseURL(c, h.cfg) + "/session-expired"
 	}
 
 	idTokenHint := ""

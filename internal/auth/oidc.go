@@ -61,14 +61,16 @@ func NewOIDCClient(ctx context.Context, cfg config.Config) (*OIDCClient, error) 
 }
 
 // AuthCodeURL returns the Keycloak authorization URL.
-func (c *OIDCClient) AuthCodeURL(state, nonce string) string {
-	return c.oauth2.AuthCodeURL(state, oauth2.AccessTypeOffline, oidc.Nonce(nonce))
+func (c *OIDCClient) AuthCodeURL(state, nonce, redirectURL string) string {
+	oauthCfg := c.oauthConfig(redirectURL)
+	return oauthCfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oidc.Nonce(nonce))
 }
 
 // Exchange exchanges the authorization code and verifies the returned ID token.
-func (c *OIDCClient) Exchange(ctx context.Context, code, expectedNonce string) (TokenBundle, error) {
+func (c *OIDCClient) Exchange(ctx context.Context, code, expectedNonce, redirectURL string) (TokenBundle, error) {
 	oidcContext := oidc.ClientContext(ctx, c.http)
-	token, err := c.oauth2.Exchange(oidcContext, code)
+	oauthCfg := c.oauthConfig(redirectURL)
+	token, err := oauthCfg.Exchange(oidcContext, code)
 	if err != nil {
 		return TokenBundle{}, err
 	}
@@ -123,4 +125,12 @@ func (c *OIDCClient) Ready() bool {
 
 func oidcAuthorizationURL(cfg config.Config) string {
 	return strings.TrimRight(cfg.Keycloak.PublicURL, "/") + "/realms/" + cfg.Keycloak.Realm + "/protocol/openid-connect/auth"
+}
+
+func (c *OIDCClient) oauthConfig(redirectURL string) oauth2.Config {
+	cfg := *c.oauth2
+	if redirectURL != "" {
+		cfg.RedirectURL = redirectURL
+	}
+	return cfg
 }

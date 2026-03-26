@@ -16,7 +16,8 @@ fi
 : "${KEYCLOAK_OIDC_CLIENT_SECRET:=portal-api-secret}"
 : "${KEYCLOAK_ADMIN_CLIENT_ID:=portal-sync}"
 : "${KEYCLOAK_ADMIN_CLIENT_SECRET:=portal-sync-secret}"
-: "${KEYCLOAK_REDIRECT_URL:=http://localhost:5173/api/auth/callback}"
+: "${WEB_PUBLIC_URL:=http://localhost:5173}"
+: "${KEYCLOAK_REDIRECT_URL:=${WEB_PUBLIC_URL%/}/api/auth/callback}"
 
 require() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing dependency: $1" >&2; exit 1; }

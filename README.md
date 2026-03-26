@@ -68,7 +68,8 @@ Recommended browser entry:
 - Users open `portal-web` on one public origin, for example `https://portal.example.com`
 - Frontend calls relative `/api/*`
 - Reverse proxy or ingress forwards `/api/*` to `portal-api`
-- `KEYCLOAK_REDIRECT_URL` should also use that same public origin, for example `https://portal.example.com/api/auth/callback`
+- Runtime callback URL and post-login redirect are derived from the actual incoming request host and forwarded headers
+- Keycloak client redirect allow-list still must include the public callback URI, for example `https://portal.example.com/api/auth/callback`
 
 Important Keycloak URL split:
 
@@ -83,6 +84,16 @@ In Docker Compose local development this usually means:
 And the frontend-facing callback should be:
 
 - `KEYCLOAK_REDIRECT_URL=http://localhost:5173/api/auth/callback`
+
+In production, `KEYCLOAK_PUBLIC_URL` must be set to the real browser-facing Keycloak address such as `https://sso.example.com`. The portal can derive its own public origin from the request, but it cannot safely guess the public Keycloak hostname.
+
+Portal-owned public URLs can be omitted and derived automatically:
+
+- if `APP_PUBLIC_URL` is not set, it falls back to `${WEB_PUBLIC_URL}/api`
+- if `KEYCLOAK_REDIRECT_URL` is not set, it falls back to `${WEB_PUBLIC_URL}/api/auth/callback`
+- if `KEYCLOAK_POST_LOGOUT_REDIRECT_URL` is not set, it falls back to `${WEB_PUBLIC_URL}/login`
+
+Only `KEYCLOAK_PUBLIC_URL` should remain explicit, because Keycloak is usually on a different public host.
 
 ## Start the full development stack
 
