@@ -1,0 +1,73 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: portal-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ../../scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.2
+    container_name: portal-keycloak
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --http-port=8080
+      - --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./keycloak/portal-realm.json:/opt/keycloak/data/import/portal-realm.json:ro
+
+  portal-api:
+    build:
+      context: ../../
+      dockerfile: apps/portal-api/Dockerfile
+    container_name: portal-api
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - keycloak
+    env_file:
+      - ../../.env
+    environment:
+      PORTAL_API_LISTEN_ADDR: :8080
+      PORTAL_PUBLIC_API_URL: http://localhost:8080
+      PORTAL_PUBLIC_WEB_URL: http://localhost:5173
+      PORTAL_ALLOWED_ORIGINS: http://localhost:5173
+      PORTAL_MONGO_URI: mongodb://mongo:27017
+      PORTAL_MONGO_DATABASE: portal
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: portal
+      KEYCLOAK_ADMIN_REALM: master
+      KEYCLOAK_CLIENT_ID: portal-api
+      KEYCLOAK_CLIENT_SECRET: portal-api-secret
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+      KEYCLOAK_REDIRECT_URL: http://localhost:8080/api/v1/auth/callback
+      KEYCLOAK_LOGOUT_REDIRECT_URL: http://localhost:5173/login
+    ports:
+      - "8080:8080"
+
+  portal-web:
+    build:
+      context: ../../
+      dockerfile: apps/portal-web/Dockerfile
+    container_name: portal-web
+    restart: unless-stopped
+    depends_on:
+      - portal-api
+    environment:
+      PORTAL_API_BASE_URL: http://localhost:8080/api/v1
+      PORTAL_APP_TITLE: Portal
+    ports:
+      - "5173:80"
+
+volumes:
+  mongo-data:

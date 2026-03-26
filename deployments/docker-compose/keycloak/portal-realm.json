@@ -1,0 +1,136 @@
+{
+  "realm": "portal",
+  "enabled": true,
+  "displayName": "Portal Realm",
+  "registrationAllowed": false,
+  "loginTheme": "keycloak",
+  "clients": [
+    {
+      "clientId": "portal-api",
+      "name": "Portal API",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "portal-api-secret",
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/api/v1/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ]
+    },
+    {
+      "clientId": "sales-app",
+      "name": "Sales Console",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "rootUrl": "https://sales.example.local",
+      "baseUrl": "https://sales.example.local",
+      "redirectUris": [
+        "https://sales.example.local/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "roles": [
+        {
+          "name": "viewer",
+          "description": "Sales viewer"
+        }
+      ]
+    },
+    {
+      "clientId": "ops-app",
+      "name": "Operations Console",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "rootUrl": "https://ops.example.local",
+      "baseUrl": "https://ops.example.local",
+      "redirectUris": [
+        "https://ops.example.local/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "roles": [
+        {
+          "name": "viewer",
+          "description": "Ops viewer"
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "portal-admin",
+        "description": "Portal administrator"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "portal-admin",
+      "enabled": true,
+      "email": "portal-admin@example.local",
+      "emailVerified": true,
+      "firstName": "Portal",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Admin123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "portal-admin"
+      ],
+      "clientRoles": {
+        "sales-app": [
+          "viewer"
+        ],
+        "ops-app": [
+          "viewer"
+        ]
+      }
+    },
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.local",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Operator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Alice123!",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "sales-app": [
+          "viewer"
+        ]
+      }
+    }
+  ]
+}
