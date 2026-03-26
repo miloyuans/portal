@@ -4,40 +4,33 @@ import (
 	"context"
 	"slices"
 	"sort"
-	"strings"
 
-	"portal/internal/config"
 	"portal/internal/model"
 	"portal/internal/repository"
 )
 
+// Service resolves portal visibility and admin access rules.
 type Service struct {
 	repos *repository.Repositories
-	cfg   config.Config
 }
 
-func NewService(repos *repository.Repositories, cfg config.Config) *Service {
-	return &Service{
-		repos: repos,
-		cfg:   cfg,
-	}
+// NewService creates a PermissionService.
+func NewService(repos *repository.Repositories) *Service {
+	return &Service{repos: repos}
 }
 
-func (s *Service) IsAdmin(session model.PortalSession) bool {
-	for _, role := range session.RealmRoles {
-		if slices.Contains(s.cfg.Permission.AdminRealmRoles, role) {
-			return true
-		}
-	}
-	return false
+// IsPortalAdmin reports whether the current session has portal admin access.
+func (s *Service) IsPortalAdmin(session model.PortalSession) bool {
+	return slices.Contains(session.RealmRoles, "portal_admin")
 }
 
-func (s *Service) BuildVisibleApps(ctx context.Context, session model.PortalSession) ([]model.PortalApp, error) {
-	clients, err := s.repos.Clients.ListByRealm(ctx, session.Realm)
+// ResolveApps returns all visible portal apps for the current user.
+func (s *Service) ResolveApps(ctx context.Context, session model.PortalSession) ([]model.PortalAppView, error) {
+	clients, err := s.repos.Clients.ListByRealm(ctx, session.RealmID)
 	if err != nil {
 		return nil, err
 	}
-	metas, err := s.repos.ClientMetas.ListByRealm(ctx, session.Realm)
+	metas, err := s.repos.ClientMetas.ListByRealm(ctx, session.RealmID)
 	if err != nil {
 		return nil, err
 	}
@@ -47,56 +40,73 @@ func (s *Service) BuildVisibleApps(ctx context.Context, session model.PortalSess
 		metaByClientID[meta.ClientID] = meta
 	}
 
-	isAdmin := s.IsAdmin(session)
-	apps := make([]model.PortalApp, 0)
+	type sortableApp struct {
+		view model.PortalAppView
+		sort int
+	}
+
+	var sortable []sortableApp
 	for _, client := range clients {
-		meta, hasMeta := metaByClientID[client.ClientID]
-		targetURL := firstNonEmpty(meta.TargetURL, client.RootURL, client.BaseURL)
-		if !client.Enabled || strings.TrimSpace(targetURL) == "" {
+		meta, ok := metaByClientID[client.ClientID]
+		if !ok || !client.Enabled || !meta.Visible {
 			continue
 		}
 
-		enabled := client.Enabled
-		showInPortal := true
-		if hasMeta {
-			enabled = meta.Enabled
-			showInPortal = meta.ShowInPortal
-		}
-		if !enabled || !showInPortal {
+		canView := s.canView(client, meta, session)
+		if !canView {
 			continue
 		}
 
-		if !isAdmin && !s.clientVisibleToUser(client, meta, hasMeta, session) {
-			continue
-		}
-
-		apps = append(apps, model.PortalApp{
-			ClientID:    client.ClientID,
-			DisplayName: firstNonEmpty(meta.DisplayName, client.Name, client.ClientID),
-			Description: firstNonEmpty(meta.Description, client.Description),
-			TargetURL:   targetURL,
-			Icon:        meta.Icon,
-			Category:    meta.Category,
-			Tags:        meta.Tags,
-			SortOrder:   meta.SortOrder,
+		sortable = append(sortable, sortableApp{
+			sort: meta.Sort,
+			view: model.PortalAppView{
+				ClientID:    client.ClientID,
+				DisplayName: firstNonEmpty(meta.DisplayName, client.Name, client.ClientID),
+				Category:    meta.Category,
+				Icon:        meta.Icon,
+				LaunchURL:   firstNonEmpty(meta.LaunchURL, client.BaseURL, client.RootURL),
+				CanView:     true,
+				CanLaunch:   true,
+				CanAdmin:    s.canAdmin(meta, session),
+			},
 		})
 	}
 
-	sort.Slice(apps, func(i, j int) bool {
-		if apps[i].SortOrder == apps[j].SortOrder {
-			return apps[i].DisplayName < apps[j].DisplayName
+	sort.Slice(sortable, func(i, j int) bool {
+		if sortable[i].sort != sortable[j].sort {
+			return sortable[i].sort < sortable[j].sort
 		}
-		return apps[i].SortOrder < apps[j].SortOrder
+		if sortable[i].view.DisplayName == sortable[j].view.DisplayName {
+			return sortable[i].view.ClientID < sortable[j].view.ClientID
+		}
+		return sortable[i].view.DisplayName < sortable[j].view.DisplayName
 	})
+
+	apps := make([]model.PortalAppView, 0, len(sortable))
+	for _, item := range sortable {
+		apps = append(apps, item.view)
+	}
 	return apps, nil
 }
 
-func (s *Service) clientVisibleToUser(client model.ClientProjection, meta model.PortalClientMeta, hasMeta bool, session model.PortalSession) bool {
-	userClientRoles := session.ClientRoles[client.ClientID]
-	if hasMeta && (len(meta.RequiredRealmRoles) > 0 || len(meta.RequiredClientRoles) > 0) {
-		return hasIntersection(session.RealmRoles, meta.RequiredRealmRoles) || hasIntersection(userClientRoles, meta.RequiredClientRoles)
+func (s *Service) canView(client model.ClientProjection, meta model.PortalClientMeta, session model.PortalSession) bool {
+	if !client.Enabled || !meta.Visible {
+		return false
 	}
-	return len(userClientRoles) > 0
+	if len(meta.AccessRules.AnyRealmRoles) == 0 && len(meta.AccessRules.AnyClientRoles) == 0 {
+		return s.IsPortalAdmin(session)
+	}
+	if hasIntersection(session.RealmRoles, meta.AccessRules.AnyRealmRoles) {
+		return true
+	}
+	return hasIntersection(session.ClientRoles[client.ClientID], meta.AccessRules.AnyClientRoles)
+}
+
+func (s *Service) canAdmin(meta model.PortalClientMeta, session model.PortalSession) bool {
+	if s.IsPortalAdmin(session) {
+		return true
+	}
+	return hasIntersection(session.RealmRoles, meta.AccessRules.AdminRealmRoles)
 }
 
 func hasIntersection(left, right []string) bool {
@@ -113,7 +123,7 @@ func hasIntersection(left, right []string) bool {
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
+		if value != "" {
 			return value
 		}
 	}

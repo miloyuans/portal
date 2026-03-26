@@ -2,70 +2,98 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { apiClient, buildApiUrl } from '../api/client'
-import type { ApiEnvelope, CurrentUserProfile, PortalApp } from '../api/types'
+import type { ApiEnvelope, CurrentUserProfile, PortalAppView, RealmProjection, SessionView } from '../api/types'
 
 let idleTimer: number | undefined
 let listenersBound = false
 
 export const useSessionStore = defineStore('session', () => {
+  const me = ref<SessionView | null>(null)
   const profile = ref<CurrentUserProfile | null>(null)
-  const apps = ref<PortalApp[]>([])
+  const apps = ref<PortalAppView[]>([])
+  const realms = ref<RealmProjection[]>([])
   const ready = ref(false)
 
-  const isAuthenticated = computed(() => profile.value !== null)
-  const isAdmin = computed(() => profile.value?.isAdmin ?? false)
-  const displayName = computed(() => profile.value?.user.displayName || profile.value?.user.username || 'Portal User')
+  const isAuthenticated = computed(() => me.value !== null)
+  const isAdmin = computed(() => me.value?.realmRoles.includes('portal_admin') ?? false)
+  const displayName = computed(() => me.value?.displayName || me.value?.username || 'Portal User')
 
   async function bootstrap(): Promise<void> {
     if (ready.value) {
       return
     }
     try {
-      await fetchSession()
+      await fetchMe()
     } catch {
+      me.value = null
       profile.value = null
       apps.value = []
+      realms.value = []
     } finally {
       ready.value = true
     }
   }
 
-  async function fetchSession(): Promise<CurrentUserProfile> {
-    const response = await apiClient.get<ApiEnvelope<CurrentUserProfile>>('/me')
+  async function fetchMe(): Promise<SessionView> {
+    const response = await apiClient.get<ApiEnvelope<SessionView>>('/auth/me')
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error?.message ?? '无法获取当前会话')
     }
-    profile.value = response.data.data
+    me.value = response.data.data
     bindActivityListeners()
     scheduleIdleLogout()
     return response.data.data
   }
 
+  async function fetchProfile(): Promise<void> {
+    const response = await apiClient.get<ApiEnvelope<CurrentUserProfile>>('/portal/profile')
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error?.message ?? '无法获取当前用户资料')
+    }
+    profile.value = response.data.data
+  }
+
   async function fetchApps(): Promise<void> {
-    const response = await apiClient.get<ApiEnvelope<PortalApp[]>>('/apps')
+    const response = await apiClient.get<ApiEnvelope<PortalAppView[]>>('/portal/apps')
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error?.message ?? '无法获取应用列表')
     }
     apps.value = response.data.data
   }
 
+  async function fetchRealms(): Promise<void> {
+    const response = await apiClient.get<ApiEnvelope<RealmProjection[]>>('/portal/realms')
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error?.message ?? '无法获取 realm 列表')
+    }
+    realms.value = response.data.data
+  }
+
   function goLogin(): void {
     window.location.href = buildApiUrl('/auth/login')
   }
 
-  function logout(reason: 'manual' | 'expired' = 'manual'): void {
-    const suffix = reason === 'expired' ? '?reason=expired' : ''
-    window.location.href = buildApiUrl(`/auth/logout${suffix}`)
+  async function logout(reason: 'manual' | 'expired' = 'manual'): Promise<void> {
+    try {
+      const suffix = reason === 'expired' ? '?reason=expired' : ''
+      const response = await apiClient.post<ApiEnvelope<{ logoutUrl: string }>>(`/auth/logout${suffix}`)
+      const logoutUrl = response.data.data?.logoutUrl
+      window.location.href = logoutUrl ?? (reason === 'expired' ? '/session-expired' : '/login')
+    } catch {
+      window.location.href = reason === 'expired' ? '/session-expired' : '/login'
+    }
   }
 
   function scheduleIdleLogout(): void {
     clearIdleTimer()
-    const timeoutMinutes = profile.value?.settings.idleTimeoutMinutes ?? 15
-    idleTimer = window.setTimeout(() => logout('expired'), timeoutMinutes * 60 * 1000)
+    const timeoutMinutes = me.value?.idleTimeoutMinutes ?? 15
+    idleTimer = window.setTimeout(() => {
+      void logout('expired')
+    }, timeoutMinutes * 60 * 1000)
   }
 
   function touchActivity(): void {
-    if (!profile.value) {
+    if (!me.value) {
       return
     }
     scheduleIdleLogout()
@@ -93,12 +121,16 @@ export const useSessionStore = defineStore('session', () => {
     bootstrap,
     displayName,
     fetchApps,
-    fetchSession,
+    fetchMe,
+    fetchProfile,
+    fetchRealms,
     goLogin,
     isAdmin,
     isAuthenticated,
     logout,
+    me,
     profile,
+    realms,
     ready,
   }
 })

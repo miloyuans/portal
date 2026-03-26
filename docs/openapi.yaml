@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Portal API
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: http://localhost:8080
 paths:
@@ -17,154 +17,98 @@ paths:
       responses:
         '200':
           description: Ready
-  /api/v1/auth/login:
+  /api/auth/login:
     get:
-      summary: Redirect to Keycloak login
+      summary: Start OIDC login
       responses:
         '302':
-          description: Redirect
-  /api/v1/auth/callback:
+          description: Redirect to Keycloak
+  /api/auth/callback:
     get:
       summary: OIDC callback
-      parameters:
-        - in: query
-          name: code
-          schema:
-            type: string
-        - in: query
-          name: state
-          schema:
-            type: string
       responses:
         '302':
-          description: Redirect after session creation
-  /api/v1/auth/logout:
-    get:
-      summary: Delete portal session then redirect to Keycloak logout
-      parameters:
-        - in: query
-          name: reason
-          schema:
-            type: string
-            enum: [manual, expired]
-      responses:
-        '302':
-          description: Redirect
-  /api/v1/me:
-    get:
-      summary: Current portal session profile
-      responses:
-        '200':
-          description: Current user
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessEnvelope'
-  /api/v1/apps:
-    get:
-      summary: Visible portal apps
-      responses:
-        '200':
-          description: Visible apps
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessEnvelope'
-  /api/v1/admin/client-metas:
-    get:
-      summary: List portal client metadata
-      responses:
-        '200':
-          description: Client metadata
+          description: Redirect back to portal-web
+  /api/auth/logout:
     post:
-      summary: Create or upsert portal client metadata
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PortalClientMeta'
+      summary: Delete portal session and return Keycloak logout URL
       responses:
         '200':
-          description: Saved
-  /api/v1/admin/client-metas/{clientId}:
-    put:
-      summary: Update portal client metadata
-      parameters:
-        - in: path
-          name: clientId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PortalClientMeta'
-      responses:
-        '200':
-          description: Saved
-    delete:
-      summary: Delete portal client metadata
-      parameters:
-        - in: path
-          name: clientId
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Deleted
-  /api/v1/admin/settings:
+          description: Logout URL
+  /api/auth/me:
     get:
-      summary: Read portal settings
+      summary: Current portal session
       responses:
         '200':
-          description: Settings
+          description: Current session
+  /api/portal/apps:
+    get:
+      summary: Current user's visible apps
+      responses:
+        '200':
+          description: App list
+  /api/portal/realms:
+    get:
+      summary: Projected realms
+      responses:
+        '200':
+          description: Realm list
+  /api/portal/profile:
+    get:
+      summary: Current user projected profile
+      responses:
+        '200':
+          description: Profile
+  /api/admin/realms:
+    get:
+      summary: Admin realm list
+      responses:
+        '200':
+          description: Realm list
+  /api/admin/clients:
+    get:
+      summary: Admin client list with portal metadata
+      responses:
+        '200':
+          description: Client rows
+  /api/admin/clients/{clientId}/meta:
     put:
-      summary: Update portal settings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idleTimeoutMinutes:
-                  type: integer
+      summary: Update portal_client_meta
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
       responses:
         '200':
-          description: Updated
-components:
-  schemas:
-    SuccessEnvelope:
-      type: object
-      properties:
-        success:
-          type: boolean
-        data:
-          type: object
-    PortalClientMeta:
-      type: object
-      properties:
-        clientId:
-          type: string
-        displayName:
-          type: string
-        description:
-          type: string
-        targetUrl:
-          type: string
-        enabled:
-          type: boolean
-        showInPortal:
-          type: boolean
-        requiredRealmRoles:
-          type: array
-          items:
+          description: Saved
+  /api/admin/users/{userId}:
+    get:
+      summary: Get projected user
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
             type: string
-        requiredClientRoles:
-          type: array
-          items:
-            type: string
+      responses:
+        '200':
+          description: User projection
+  /api/admin/settings/session:
+    get:
+      summary: Get session settings
+      responses:
+        '200':
+          description: Session settings
+    put:
+      summary: Update session settings
+      responses:
+        '200':
+          description: Session settings saved
+  /api/admin/sync-status:
+    get:
+      summary: Get latest sync summary
+      responses:
+        '200':
+          description: Sync status

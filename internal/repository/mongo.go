@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,20 +13,28 @@ import (
 )
 
 const (
-	RealmsCollection     = "kc_realms"
-	ClientsCollection    = "kc_clients"
+	// RealmsCollection stores realm projections.
+	RealmsCollection = "kc_realms"
+	// ClientsCollection stores client projections.
+	ClientsCollection = "kc_clients"
+	// ClientMetaCollection stores portal-only client metadata.
 	ClientMetaCollection = "portal_client_meta"
-	UsersCollection      = "kc_users"
-	SessionsCollection   = "portal_sessions"
-	SettingsCollection   = "portal_settings"
+	// UsersCollection stores user projections.
+	UsersCollection = "kc_users"
+	// SessionsCollection stores portal sessions.
+	SessionsCollection = "portal_sessions"
+	// SettingsCollection stores global portal settings.
+	SettingsCollection = "portal_settings"
 )
 
+// Mongo wraps a MongoDB client and database.
 type Mongo struct {
 	Client   *mongo.Client
 	Database *mongo.Database
 	logger   *slog.Logger
 }
 
+// Repositories groups all Mongo repositories.
 type Repositories struct {
 	Realms      *RealmRepository
 	Clients     *ClientRepository
@@ -37,8 +44,9 @@ type Repositories struct {
 	Settings    *SettingsRepository
 }
 
+// NewMongo connects to MongoDB and ensures indexes.
 func NewMongo(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Mongo, error) {
-	connectCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Mongo.ConnectTimeout)*time.Second)
+	connectCtx, cancel := context.WithTimeout(ctx, cfg.Mongo.ConnectTimeout)
 	defer cancel()
 
 	client, err := mongo.Connect(connectCtx, options.Client().ApplyURI(cfg.Mongo.URI))
@@ -52,12 +60,18 @@ func NewMongo(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Mon
 		logger:   logger,
 	}
 
+	if err := mongoDB.Ping(connectCtx); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, err
+	}
+
 	if err := mongoDB.EnsureIndexes(ctx); err != nil {
 		return nil, err
 	}
 	return mongoDB, nil
 }
 
+// EnsureIndexes creates the required Mongo indexes.
 func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 	indexes := []struct {
 		collection string
@@ -66,26 +80,27 @@ func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 		{
 			collection: RealmsCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "realm", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_id")},
 			},
 		},
 		{
 			collection: ClientsCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "realm", Value: 1}, {Key: "clientId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_id")},
-				{Keys: bson.D{{Key: "realm", Value: 1}, {Key: "clientUuid", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_uuid")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}, {Key: "clientId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_id")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}, {Key: "clientUuid", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_uuid")},
 			},
 		},
 		{
 			collection: ClientMetaCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "realm", Value: 1}, {Key: "clientId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_meta")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}, {Key: "clientId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_client_meta")},
 			},
 		},
 		{
 			collection: UsersCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "realm", Value: 1}, {Key: "userId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_user")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}, {Key: "userId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_user_id")},
+				{Keys: bson.D{{Key: "realmId", Value: 1}, {Key: "username", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_realm_username")},
 			},
 		},
 		{
@@ -93,13 +108,12 @@ func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 			models: []mongo.IndexModel{
 				{Keys: bson.D{{Key: "sessionId", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_session_id")},
 				{Keys: bson.D{{Key: "expiresAt", Value: 1}}, Options: options.Index().SetExpireAfterSeconds(0).SetName("ttl_expires_at")},
-				{Keys: bson.D{{Key: "realm", Value: 1}, {Key: "userId", Value: 1}}, Options: options.Index().SetName("ix_realm_user")},
 			},
 		},
 		{
 			collection: SettingsCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "realm", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_settings_realm")},
+				{Keys: bson.D{{Key: "_id", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_settings_id")},
 			},
 		},
 	}
@@ -109,18 +123,22 @@ func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 			return err
 		}
 	}
+
 	m.logger.Info("mongo indexes ensured")
 	return nil
 }
 
+// Ping checks MongoDB readiness.
 func (m *Mongo) Ping(ctx context.Context) error {
 	return m.Client.Ping(ctx, nil)
 }
 
+// Close disconnects the MongoDB client.
 func (m *Mongo) Close(ctx context.Context) error {
 	return m.Client.Disconnect(ctx)
 }
 
+// NewRepositories creates all repository instances.
 func NewRepositories(db *mongo.Database, logger *slog.Logger) *Repositories {
 	return &Repositories{
 		Realms:      NewRealmRepository(db, logger),
@@ -132,12 +150,10 @@ func NewRepositories(db *mongo.Database, logger *slog.Logger) *Repositories {
 	}
 }
 
-func defaultSettings(realm string, idleTimeoutMinutes int) model.PortalSettings {
-	now := time.Now().UTC()
+func defaultSettings(idleTimeoutMinutes int) model.PortalSettings {
 	return model.PortalSettings{
-		Realm:              realm,
+		ID:                 "global",
 		IdleTimeoutMinutes: idleTimeoutMinutes,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		IdleWarnSeconds:    60,
 	}
 }

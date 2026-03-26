@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,34 +11,34 @@ import (
 	"portal/internal/auth"
 	"portal/internal/config"
 	"portal/internal/model"
-	"portal/internal/permission"
 	"portal/internal/repository"
 	sessionpkg "portal/internal/session"
 	syncsvc "portal/internal/sync"
 )
 
+// AuthHandler serves OIDC login, callback, logout and auth/me.
 type AuthHandler struct {
-	cfg         config.Config
-	oidc        *auth.OIDCClient
-	syncService *syncsvc.Service
-	sessions    *sessionpkg.Manager
-	repos       *repository.Repositories
-	permissions *permission.Service
-	logger      *slog.Logger
+	cfg      config.Config
+	oidc     *auth.OIDCClient
+	sync     *syncsvc.Service
+	sessions *sessionpkg.Manager
+	repos    *repository.Repositories
+	logger   *slog.Logger
 }
 
-func NewAuthHandler(cfg config.Config, oidc *auth.OIDCClient, syncService *syncsvc.Service, sessions *sessionpkg.Manager, repos *repository.Repositories, permissions *permission.Service, logger *slog.Logger) *AuthHandler {
+// NewAuthHandler creates an AuthHandler.
+func NewAuthHandler(cfg config.Config, oidc *auth.OIDCClient, syncService *syncsvc.Service, sessions *sessionpkg.Manager, repos *repository.Repositories, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
-		cfg:         cfg,
-		oidc:        oidc,
-		syncService: syncService,
-		sessions:    sessions,
-		repos:       repos,
-		permissions: permissions,
-		logger:      logger,
+		cfg:      cfg,
+		oidc:     oidc,
+		sync:     syncService,
+		sessions: sessions,
+		repos:    repos,
+		logger:   logger,
 	}
 }
 
+// Login starts the OIDC browser login flow.
 func (h *AuthHandler) Login(c *gin.Context) {
 	state, err := auth.NewStateValue()
 	if err != nil {
@@ -52,11 +51,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.StateCookieName, state, h.cfg.Session.StateCookieMaxAgeSeconds)
-	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.NonceCookieName, nonce, h.cfg.Session.StateCookieMaxAgeSeconds)
+	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.StateCookieName, state, h.cfg.Session.StateCookieMaxAge)
+	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.NonceCookieName, nonce, h.cfg.Session.StateCookieMaxAge)
 	c.Redirect(http.StatusFound, h.oidc.AuthCodeURL(state, nonce))
 }
 
+// Callback handles the OIDC authorization code callback.
 func (h *AuthHandler) Callback(c *gin.Context) {
 	state := c.Query("state")
 	if state == "" {
@@ -90,53 +90,52 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		JSONError(c, http.StatusUnauthorized, "TOKEN_EXCHANGE_FAILED", "oidc token exchange failed", err.Error())
 		return
 	}
-
-	result, err := h.syncService.SyncCurrentUser(c.Request.Context(), tokenBundle.Claims.Subject)
-	if err != nil {
-		JSONError(c, http.StatusBadGateway, "SYNC_FAILED", "failed to sync current user from keycloak", err.Error())
+	if tokenBundle.Claims.Subject == "" {
+		JSONError(c, http.StatusUnauthorized, "SUBJECT_MISSING", "oidc token is missing subject claim", nil)
 		return
 	}
 
-	settings, err := h.repos.Settings.GetByRealm(c.Request.Context(), result.Realm.Realm, h.cfg.Session.DefaultIdleTimeoutMinutes)
+	syncResult, err := h.sync.SyncCurrentUser(c.Request.Context(), tokenBundle.Claims.Subject)
+	if err != nil {
+		JSONError(c, http.StatusBadGateway, "SYNC_FAILED", "failed to synchronize current user", err.Error())
+		return
+	}
+
+	settings, err := h.repos.Settings.GetGlobal(c.Request.Context(), h.cfg.Session.IdleTimeoutMinutes)
 	if err != nil {
 		JSONError(c, http.StatusInternalServerError, "SETTINGS_LOOKUP_FAILED", "failed to load portal settings", err.Error())
 		return
 	}
 
-	displayName := strings.TrimSpace(result.User.FirstName + " " + result.User.LastName)
+	displayName := strings.TrimSpace(syncResult.User.FirstName + " " + syncResult.User.LastName)
 	if displayName == "" {
-		displayName = result.User.Username
+		displayName = syncResult.User.Username
 	}
 
 	sessionRecord, err := h.sessions.Create(c.Request.Context(), model.PortalSession{
-		Realm:              result.Realm.Realm,
-		UserID:             result.User.UserID,
-		Username:           result.User.Username,
-		Email:              result.User.Email,
-		DisplayName:        displayName,
-		RealmRoles:         result.User.RealmRoles,
-		ClientRoles:        result.User.ClientRoles,
-		AccessToken:        tokenBundle.AccessToken,
-		RefreshToken:       tokenBundle.RefreshToken,
-		IDToken:            tokenBundle.IDToken,
-		IdleTimeoutMinutes: settings.IdleTimeoutMinutes,
-		ExpiresAt:          time.Now().UTC().Add(time.Duration(h.cfg.Session.AbsoluteTTLHours) * time.Hour),
-	})
+		RealmID:     syncResult.Realm.RealmID,
+		UserID:      syncResult.User.UserID,
+		Username:    syncResult.User.Username,
+		DisplayName: displayName,
+		RealmRoles:  syncResult.User.RealmRoles,
+		ClientRoles: syncResult.User.ClientRoles,
+		IDToken:     tokenBundle.IDToken,
+	}, settings.IdleTimeoutMinutes)
 	if err != nil {
 		JSONError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "failed to create portal session", err.Error())
 		return
 	}
 
-	h.sessions.SetCookie(c, sessionRecord.SessionID)
+	h.sessions.SetCookie(c, sessionRecord.SessionID, sessionRecord.ExpiresAt)
 	h.logger.Info("portal session established",
-		slog.String("realm", sessionRecord.Realm),
+		slog.String("realmId", sessionRecord.RealmID),
 		slog.String("userId", sessionRecord.UserID),
-		slog.Bool("isAdmin", h.permissions.IsAdmin(sessionRecord)),
 	)
 
-	c.Redirect(http.StatusFound, h.cfg.Server.PublicWebURL+"/auth/callback/success")
+	c.Redirect(http.StatusFound, h.cfg.Server.PublicWebURL+"/portal")
 }
 
+// Logout deletes the portal session and returns the Keycloak logout URL.
 func (h *AuthHandler) Logout(c *gin.Context) {
 	session, err := h.sessions.GetByRequest(c.Request.Context(), c.Request)
 	if err == nil {
@@ -147,14 +146,27 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	h.sessions.ClearCookie(c)
-	idTokenHint := ""
-	if err == nil {
-		idTokenHint = session.IDToken
-	}
-
 	redirectURI := h.cfg.Server.PublicWebURL + "/login"
 	if c.Query("reason") == "expired" {
 		redirectURI = h.cfg.Server.PublicWebURL + "/session-expired"
 	}
-	c.Redirect(http.StatusFound, h.oidc.LogoutURL(idTokenHint, redirectURI))
+
+	idTokenHint := ""
+	if err == nil {
+		idTokenHint = session.IDToken
+	}
+	JSONSuccess(c, http.StatusOK, gin.H{
+		"logoutUrl": h.oidc.LogoutURL(idTokenHint, redirectURI),
+	})
+}
+
+// Me returns the current session summary.
+func (h *AuthHandler) Me(c *gin.Context) {
+	sessionValue, ok := c.Get("portalSession")
+	if !ok {
+		JSONError(c, http.StatusUnauthorized, "AUTH_REQUIRED", "portal session not found", nil)
+		return
+	}
+	session, _ := sessionValue.(model.PortalSession)
+	JSONSuccess(c, http.StatusOK, session.View())
 }

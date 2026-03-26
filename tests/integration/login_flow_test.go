@@ -2,16 +2,12 @@
 
 package integration
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
 
-func TestLoginFlowSkeleton(t *testing.T) {
-	baseURL := os.Getenv("PORTAL_BASE_URL")
-	if baseURL == "" {
-		t.Skip("set PORTAL_BASE_URL to run the login flow integration skeleton")
-	}
+func TestOIDCLoginCallbackFlowSkeleton(t *testing.T) {
+	t.Skip("integration skeleton: stand up Keycloak, drive /api/auth/login -> /api/auth/callback, assert portal session cookie and redirect to /portal")
+}
 
-	t.Skip("integration skeleton: start docker compose, navigate browser or automation through OIDC login, then assert /api/v1/me returns the synced session profile")
+func TestLoginSyncsCurrentUserSnapshotSkeleton(t *testing.T) {
+	t.Skip("integration skeleton: after callback, assert kc_realms, kc_clients and kc_users are upserted for the current user only")
 }

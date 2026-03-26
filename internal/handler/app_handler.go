@@ -9,30 +9,46 @@ import (
 	"portal/internal/service"
 )
 
-type AppHandler struct {
-	service *service.AppService
+// PortalHandler serves /api/portal endpoints.
+type PortalHandler struct {
+	service            *service.AppService
+	defaultIdleTimeout int
 }
 
-func NewAppHandler(service *service.AppService) *AppHandler {
-	return &AppHandler{
-		service: service,
+// NewPortalHandler creates a PortalHandler.
+func NewPortalHandler(service *service.AppService, defaultIdleTimeout int) *PortalHandler {
+	return &PortalHandler{
+		service:            service,
+		defaultIdleTimeout: defaultIdleTimeout,
 	}
 }
 
-func (h *AppHandler) Me(c *gin.Context) {
-	profile, err := h.service.Me(c.Request.Context(), middleware.CurrentSession(c))
-	if err != nil {
-		JSONError(c, http.StatusInternalServerError, "ME_LOOKUP_FAILED", "failed to resolve current session", err.Error())
-		return
-	}
-	JSONSuccess(c, http.StatusOK, profile)
-}
-
-func (h *AppHandler) Apps(c *gin.Context) {
+// Apps returns visible portal apps.
+func (h *PortalHandler) Apps(c *gin.Context) {
 	apps, err := h.service.Apps(c.Request.Context(), middleware.CurrentSession(c))
 	if err != nil {
 		JSONError(c, http.StatusInternalServerError, "APPS_LOOKUP_FAILED", "failed to resolve visible apps", err.Error())
 		return
 	}
 	JSONSuccess(c, http.StatusOK, apps)
+}
+
+// Realms returns projected realms.
+func (h *PortalHandler) Realms(c *gin.Context) {
+	realms, err := h.service.Realms(c.Request.Context())
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "REALM_LIST_FAILED", "failed to load projected realms", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, realms)
+}
+
+// Profile returns the current user's profile.
+func (h *PortalHandler) Profile(c *gin.Context) {
+	profile, err := h.service.Profile(c.Request.Context(), middleware.CurrentSession(c), h.defaultIdleTimeout)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "PROFILE_LOOKUP_FAILED", "failed to load current profile", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, profile)
 }

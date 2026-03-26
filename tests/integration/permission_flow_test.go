@@ -2,16 +2,8 @@
 
 package integration
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
 
-func TestPermissionProjectionSkeleton(t *testing.T) {
-	baseURL := os.Getenv("PORTAL_BASE_URL")
-	if baseURL == "" {
-		t.Skip("set PORTAL_BASE_URL to run the permission projection integration skeleton")
-	}
-
-	t.Skip("integration skeleton: login as seeded users, call /api/v1/apps, and assert client visibility matches synced Keycloak realm/client roles plus portal_client_meta rules")
+func TestPortalAppsReflectAccessRulesSkeleton(t *testing.T) {
+	t.Skip("integration skeleton: seed portal_client_meta, login as multiple users, assert /api/portal/apps returns the expected canView/canLaunch/canAdmin set")
 }

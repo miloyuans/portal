@@ -21,8 +21,8 @@ const sessionStore = useSessionStore()
 
 onMounted(async () => {
   try {
-    await sessionStore.fetchSession()
-    await router.replace({ name: 'home' })
+    await sessionStore.fetchMe()
+    await router.replace({ name: 'portal' })
   } catch {
     await router.replace({ name: 'login' })
   }

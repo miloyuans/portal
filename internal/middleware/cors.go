@@ -9,9 +9,10 @@ import (
 	"portal/internal/config"
 )
 
+// CORS applies the configured CORS policy.
 func CORS(cfg config.Config) gin.HandlerFunc {
-	allowMap := make(map[string]struct{}, len(cfg.Server.AllowedOrigins))
-	for _, origin := range cfg.Server.AllowedOrigins {
+	allowMap := make(map[string]struct{}, len(cfg.CORS.AllowedOrigins))
+	for _, origin := range cfg.CORS.AllowedOrigins {
 		allowMap[strings.TrimSpace(origin)] = struct{}{}
 	}
 

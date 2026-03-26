@@ -12,11 +12,13 @@ import (
 	"portal/internal/model"
 )
 
+// SettingsRepository persists global portal settings.
 type SettingsRepository struct {
 	collection *mongo.Collection
 	logger     *slog.Logger
 }
 
+// NewSettingsRepository creates a SettingsRepository.
 func NewSettingsRepository(db *mongo.Database, logger *slog.Logger) *SettingsRepository {
 	return &SettingsRepository{
 		collection: db.Collection(SettingsCollection),
@@ -24,31 +26,26 @@ func NewSettingsRepository(db *mongo.Database, logger *slog.Logger) *SettingsRep
 	}
 }
 
-func (r *SettingsRepository) GetByRealm(ctx context.Context, realm string, defaultIdleTimeoutMinutes int) (model.PortalSettings, error) {
+// GetGlobal loads the global portal settings document.
+func (r *SettingsRepository) GetGlobal(ctx context.Context, defaultIdleTimeoutMinutes int) (model.PortalSettings, error) {
 	var out model.PortalSettings
-	err := r.collection.FindOne(ctx, bson.M{"realm": realm}).Decode(&out)
+	err := r.collection.FindOne(ctx, bson.M{"_id": "global"}).Decode(&out)
 	if err == mongo.ErrNoDocuments {
-		return defaultSettings(realm, defaultIdleTimeoutMinutes), nil
+		return defaultSettings(defaultIdleTimeoutMinutes), nil
 	}
 	return out, err
 }
 
-func (r *SettingsRepository) Upsert(ctx context.Context, settings model.PortalSettings) error {
-	now := time.Now().UTC()
-	if settings.CreatedAt.IsZero() {
-		settings.CreatedAt = now
-	}
-	settings.UpdatedAt = now
-
+// UpsertGlobal stores the global portal settings document.
+func (r *SettingsRepository) UpsertGlobal(ctx context.Context, settings model.PortalSettings) error {
+	settings.ID = "global"
+	settings.UpdatedAt = time.Now().UTC()
 	_, err := r.collection.UpdateOne(
 		ctx,
-		bson.M{"realm": settings.Realm},
+		bson.M{"_id": "global"},
 		bson.M{
 			"$set": settings,
-			"$setOnInsert": bson.M{
-				"realm":     settings.Realm,
-				"createdAt": settings.CreatedAt,
-			},
+			"$setOnInsert": bson.M{"_id": "global"},
 		},
 		options.Update().SetUpsert(true),
 	)

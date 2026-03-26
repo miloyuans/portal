@@ -5,19 +5,16 @@ import (
 	"slices"
 
 	"github.com/gin-gonic/gin"
-
-	"portal/internal/config"
 )
 
-func RequireAdmin(cfg config.Config) gin.HandlerFunc {
+// RequirePortalAdmin restricts access to portal_admin users.
+func RequirePortalAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := CurrentSession(c)
-		for _, role := range session.RealmRoles {
-			if slices.Contains(cfg.Permission.AdminRealmRoles, role) {
-				c.Next()
-				return
-			}
+		if slices.Contains(session.RealmRoles, "portal_admin") {
+			c.Next()
+			return
 		}
-		abortJSON(c, http.StatusForbidden, "FORBIDDEN", "admin role required", nil)
+		abortJSON(c, http.StatusForbidden, "FORBIDDEN", "portal_admin role required", nil)
 	}
 }

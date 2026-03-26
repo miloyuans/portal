@@ -8,56 +8,106 @@ export interface ApiEnvelope<T> {
   }
 }
 
-export interface PortalSettings {
-  realm: string
-  idleTimeoutMinutes: number
-}
-
 export interface SessionView {
   sessionId: string
-  realm: string
+  realmId: string
   userId: string
   username: string
-  email?: string
   displayName?: string
   realmRoles: string[]
   clientRoles: Record<string, string[]>
   idleTimeoutMinutes: number
-  lastSeenAt: string
+  lastActiveAt: string
   expiresAt: string
+  absoluteExpiresAt: string
+}
+
+export interface RealmProjection {
+  realmId: string
+  realmName: string
+  displayName?: string
+  enabled: boolean
+  attributes?: Record<string, unknown>
+  syncedAt: string
+}
+
+export interface UserProjection {
+  realmId: string
+  userId: string
+  username: string
+  email?: string
+  enabled: boolean
+  firstName?: string
+  lastName?: string
+  attributes?: Record<string, string[]>
+  realmRoles: string[]
+  clientRoles: Record<string, string[]>
+  syncedAt: string
+}
+
+export interface PortalSettings {
+  id: string
+  idleTimeoutMinutes: number
+  idleWarnSeconds: number
+  updatedAt?: string
 }
 
 export interface CurrentUserProfile {
-  realm: string
-  user: SessionView
-  isAdmin: boolean
+  session: SessionView
+  user: UserProjection
+  realm: RealmProjection
   settings: PortalSettings
 }
 
-export interface PortalApp {
+export interface PortalAppView {
   clientId: string
   displayName: string
-  description?: string
-  targetUrl: string
-  icon?: string
   category?: string
-  tags?: string[]
-  sortOrder: number
+  icon?: string
+  launchUrl: string
+  canView: boolean
+  canLaunch: boolean
+  canAdmin: boolean
+}
+
+export interface AccessRules {
+  anyRealmRoles?: string[]
+  anyClientRoles?: string[]
+  adminRealmRoles?: string[]
 }
 
 export interface PortalClientMeta {
-  realm: string
+  realmId: string
   clientId: string
   displayName: string
-  description?: string
-  targetUrl?: string
   icon?: string
   category?: string
-  sortOrder: number
-  enabled: boolean
-  showInPortal: boolean
-  requiredRealmRoles?: string[]
-  requiredClientRoles?: string[]
-  tags?: string[]
-  updatedBy?: string
+  sort: number
+  launchUrl?: string
+  visible: boolean
+  accessRules?: AccessRules
+}
+
+export interface AdminClientRow {
+  client: {
+    realmId: string
+    clientUuid: string
+    clientId: string
+    name?: string
+    enabled: boolean
+    baseUrl?: string
+    rootUrl?: string
+    protocol?: string
+    attributes?: Record<string, string>
+    syncedAt: string
+  }
+  meta?: PortalClientMeta
+}
+
+export interface SyncStatus {
+  realmId: string
+  realmSyncedAt: string
+  userSyncedAt: string
+  clientCount: number
+  settingsUpdatedAt: string
 }

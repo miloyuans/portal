@@ -9,14 +9,9 @@
         <el-tag v-if="app.category" type="success" effect="plain">{{ app.category }}</el-tag>
       </div>
     </template>
-    <p class="portal-muted">{{ app.description || '已同步到门户，点击即可进入。' }}</p>
-    <div v-if="app.tags?.length">
-      <el-tag v-for="tag in app.tags" :key="tag" class="portal-card-tag" effect="plain">
-        {{ tag }}
-      </el-tag>
-    </div>
+    <p class="portal-muted">canView={{ app.canView }} · canLaunch={{ app.canLaunch }} · canAdmin={{ app.canAdmin }}</p>
     <div style="margin-top: 20px;">
-      <el-button type="primary" @click="openApp">进入应用</el-button>
+      <el-button type="primary" :disabled="!app.canLaunch" @click="openApp">进入应用</el-button>
     </div>
   </el-card>
 </template>
@@ -24,13 +19,13 @@
 <script setup lang="ts">
 import { ElButton, ElCard, ElTag } from 'element-plus'
 
-import type { PortalApp } from '../api/types'
+import type { PortalAppView } from '../api/types'
 
 const props = defineProps<{
-  app: PortalApp
+  app: PortalAppView
 }>()
 
 function openApp(): void {
-  window.open(props.app.targetUrl, '_blank', 'noopener,noreferrer')
+  window.open(props.app.launchUrl, '_blank', 'noopener,noreferrer')
 }
 </script>

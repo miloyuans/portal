@@ -16,11 +16,22 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8080/api/v1/auth/callback"
+        "http://localhost:8080/api/auth/callback"
       ],
       "webOrigins": [
         "http://localhost:5173"
       ]
+    },
+    {
+      "clientId": "portal-sync",
+      "name": "Portal Sync",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "portal-sync-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
     },
     {
       "clientId": "sales-app",
@@ -80,7 +91,11 @@
   "roles": {
     "realm": [
       {
-        "name": "portal-admin",
+        "name": "portal_user",
+        "description": "Portal user"
+      },
+      {
+        "name": "portal_admin",
         "description": "Portal administrator"
       }
     ]
@@ -101,7 +116,8 @@
         }
       ],
       "realmRoles": [
-        "portal-admin"
+        "portal_user",
+        "portal_admin"
       ],
       "clientRoles": {
         "sales-app": [
@@ -125,6 +141,9 @@
           "value": "Alice123!",
           "temporary": false
         }
+      ],
+      "realmRoles": [
+        "portal_user"
       ],
       "clientRoles": {
         "sales-app": [

@@ -1,4 +1,4 @@
 window.__PORTAL_CONFIG__ = {
-  apiBaseUrl: '/api/v1',
+  apiBaseUrl: '/api',
   appTitle: 'Portal',
 }

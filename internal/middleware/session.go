@@ -13,11 +13,12 @@ import (
 
 const SessionKey = "portalSession"
 
+// Session loads the current portal session.
 func Session(manager *sessionpkg.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session, err := manager.GetByRequest(c.Request.Context(), c.Request)
 		if err != nil {
-			if errors.Is(err, http.ErrNoCookie) || errors.Is(err, mongo.ErrNoDocuments) {
+			if errors.Is(err, http.ErrNoCookie) || errors.Is(err, mongo.ErrNoDocuments) || errors.Is(err, sessionpkg.ErrInvalidSessionCookie) {
 				abortJSON(c, http.StatusUnauthorized, "AUTH_REQUIRED", "portal session not found", nil)
 				return
 			}
@@ -29,6 +30,7 @@ func Session(manager *sessionpkg.Manager) gin.HandlerFunc {
 	}
 }
 
+// CurrentSession returns the current session from gin context.
 func CurrentSession(c *gin.Context) model.PortalSession {
 	value, _ := c.Get(SessionKey)
 	session, _ := value.(model.PortalSession)

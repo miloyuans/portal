@@ -5,118 +5,142 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
+// Config contains all runtime configuration for portal-api.
 type Config struct {
-	Server     ServerConfig
-	Mongo      MongoConfig
-	Keycloak   KeycloakConfig
-	Session    SessionConfig
-	Permission PermissionConfig
-	Log        LogConfig
+	App      AppConfig
+	Server   ServerConfig
+	Mongo    MongoConfig
+	Keycloak KeycloakConfig
+	Session  SessionConfig
+	Sync     SyncConfig
+	CORS     CORSConfig
+	Log      LogConfig
 }
 
+// AppConfig stores app-level metadata.
+type AppConfig struct {
+	Name string
+	Env  string
+}
+
+// ServerConfig stores HTTP server configuration.
 type ServerConfig struct {
-	ListenAddr      string
+	Addr            string
 	PublicAPIURL    string
 	PublicWebURL    string
-	CookieName      string
-	CookieSecure    bool
-	CookieDomain    string
-	CookieSameSite  string
-	AllowedOrigins  []string
 	OpenAPIFilePath string
 }
 
+// MongoConfig stores MongoDB connection parameters.
 type MongoConfig struct {
 	URI            string
 	Database       string
-	ConnectTimeout int
+	ConnectTimeout time.Duration
 }
 
+// KeycloakConfig stores OIDC and Admin API configuration.
 type KeycloakConfig struct {
-	BaseURL            string
-	Realm              string
-	AdminRealm         string
-	ClientID           string
-	ClientSecret       string
-	AdminClientID      string
-	AdminClientSecret  string
-	AdminUsername      string
-	AdminPassword      string
-	RedirectURL        string
-	LogoutRedirectURL  string
-	Scopes             []string
-	RequestTimeoutSecs int
-	SkipTLSVerify      bool
+	BaseURL                 string
+	Realm                   string
+	OIDCClientID            string
+	OIDCClientSecret        string
+	RedirectURL             string
+	PostLogoutRedirectURL   string
+	AdminClientID           string
+	AdminClientSecret       string
+	RequestTimeout          time.Duration
+	OIDCScopes              []string
 }
 
+// SessionConfig stores portal session configuration.
 type SessionConfig struct {
-	DefaultIdleTimeoutMinutes int
-	AbsoluteTTLHours          int
-	StateCookieName           string
-	NonceCookieName           string
-	StateCookieMaxAgeSeconds  int
+	CookieName             string
+	SigningKey             string
+	Secure                 bool
+	HTTPOnly               bool
+	SameSite               string
+	IdleTimeoutMinutes     int
+	AbsoluteTimeoutMinutes int
+	StateCookieName        string
+	NonceCookieName        string
+	StateCookieMaxAge      time.Duration
 }
 
-type PermissionConfig struct {
-	AdminRealmRoles []string
+// SyncConfig stores synchronization behavior.
+type SyncConfig struct {
+	OnLogin        bool
+	TimeoutSeconds int
 }
 
+// CORSConfig stores CORS behavior.
+type CORSConfig struct {
+	AllowedOrigins []string
+}
+
+// LogConfig stores logging settings.
 type LogConfig struct {
 	Level string
 }
 
+// MustLoad loads configuration from environment variables.
 func MustLoad() Config {
 	return Config{
+		App: AppConfig{
+			Name: getEnv("APP_NAME", "portal"),
+			Env:  getEnv("APP_ENV", "development"),
+		},
 		Server: ServerConfig{
-			ListenAddr:      getEnv("PORTAL_API_LISTEN_ADDR", ":8080"),
-			PublicAPIURL:    getEnv("PORTAL_PUBLIC_API_URL", "http://localhost:8080"),
-			PublicWebURL:    getEnv("PORTAL_PUBLIC_WEB_URL", "http://localhost:5173"),
-			CookieName:      getEnv("PORTAL_SESSION_COOKIE_NAME", "portal_session"),
-			CookieSecure:    getEnvBool("PORTAL_COOKIE_SECURE", false),
-			CookieDomain:    getEnv("PORTAL_COOKIE_DOMAIN", ""),
-			CookieSameSite:  getEnv("PORTAL_COOKIE_SAMESITE", "Lax"),
-			AllowedOrigins:  getEnvSlice("PORTAL_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
-			OpenAPIFilePath: getEnv("PORTAL_OPENAPI_FILE_PATH", "docs/openapi.yaml"),
+			Addr:            getEnv("APP_ADDR", ":8080"),
+			PublicAPIURL:    getEnv("APP_PUBLIC_URL", "http://localhost:8080"),
+			PublicWebURL:    getEnv("WEB_PUBLIC_URL", "http://localhost:5173"),
+			OpenAPIFilePath: getEnv("OPENAPI_FILE_PATH", "docs/openapi.yaml"),
 		},
 		Mongo: MongoConfig{
-			URI:            getEnv("PORTAL_MONGO_URI", "mongodb://localhost:27017"),
-			Database:       getEnv("PORTAL_MONGO_DATABASE", "portal"),
-			ConnectTimeout: getEnvInt("PORTAL_MONGO_CONNECT_TIMEOUT_SECS", 10),
+			URI:            getEnv("MONGO_URI", "mongodb://localhost:27017"),
+			Database:       getEnv("MONGO_DB", "portal"),
+			ConnectTimeout: time.Duration(getEnvInt("MONGO_CONNECT_TIMEOUT_SECONDS", 10)) * time.Second,
 		},
 		Keycloak: KeycloakConfig{
-			BaseURL:            strings.TrimRight(getEnv("KEYCLOAK_BASE_URL", "http://localhost:8081"), "/"),
-			Realm:              getEnv("KEYCLOAK_REALM", "portal"),
-			AdminRealm:         getEnv("KEYCLOAK_ADMIN_REALM", "master"),
-			ClientID:           getEnv("KEYCLOAK_CLIENT_ID", "portal-api"),
-			ClientSecret:       getEnv("KEYCLOAK_CLIENT_SECRET", "change-me"),
-			AdminClientID:      getEnv("KEYCLOAK_ADMIN_CLIENT_ID", "portal-admin"),
-			AdminClientSecret:  getEnv("KEYCLOAK_ADMIN_CLIENT_SECRET", "change-me"),
-			AdminUsername:      getEnv("KEYCLOAK_ADMIN_USERNAME", ""),
-			AdminPassword:      getEnv("KEYCLOAK_ADMIN_PASSWORD", ""),
-			RedirectURL:        getEnv("KEYCLOAK_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback"),
-			LogoutRedirectURL:  getEnv("KEYCLOAK_LOGOUT_REDIRECT_URL", "http://localhost:5173/login"),
-			Scopes:             getEnvSlice("KEYCLOAK_SCOPES", []string{"openid", "profile", "email"}),
-			RequestTimeoutSecs: getEnvInt("KEYCLOAK_REQUEST_TIMEOUT_SECS", 10),
-			SkipTLSVerify:      getEnvBool("KEYCLOAK_SKIP_TLS_VERIFY", false),
+			BaseURL:               strings.TrimRight(getEnv("KEYCLOAK_BASE_URL", "http://localhost:8081"), "/"),
+			Realm:                 getEnv("KEYCLOAK_REALM", "portal"),
+			OIDCClientID:          getEnv("KEYCLOAK_OIDC_CLIENT_ID", "portal-api"),
+			OIDCClientSecret:      getEnv("KEYCLOAK_OIDC_CLIENT_SECRET", "portal-api-secret"),
+			RedirectURL:           getEnv("KEYCLOAK_REDIRECT_URL", "http://localhost:8080/api/auth/callback"),
+			PostLogoutRedirectURL: getEnv("KEYCLOAK_POST_LOGOUT_REDIRECT_URL", "http://localhost:5173/login"),
+			AdminClientID:         getEnv("KEYCLOAK_ADMIN_CLIENT_ID", "portal-sync"),
+			AdminClientSecret:     getEnv("KEYCLOAK_ADMIN_CLIENT_SECRET", "portal-sync-secret"),
+			RequestTimeout:        time.Duration(getEnvInt("SYNC_TIMEOUT_SECONDS", 10)) * time.Second,
+			OIDCScopes:            getEnvSlice("KEYCLOAK_OIDC_SCOPES", []string{"openid", "profile", "email"}),
 		},
 		Session: SessionConfig{
-			DefaultIdleTimeoutMinutes: getEnvInt("PORTAL_IDLE_TIMEOUT_MINUTES", 15),
-			AbsoluteTTLHours:          getEnvInt("PORTAL_SESSION_TTL_HOURS", 8),
-			StateCookieName:           getEnv("PORTAL_STATE_COOKIE_NAME", "portal_oidc_state"),
-			NonceCookieName:           getEnv("PORTAL_NONCE_COOKIE_NAME", "portal_oidc_nonce"),
-			StateCookieMaxAgeSeconds:  getEnvInt("PORTAL_STATE_COOKIE_MAX_AGE_SECONDS", 300),
+			CookieName:             getEnv("SESSION_COOKIE_NAME", "portal_session"),
+			SigningKey:             getEnv("SESSION_SIGNING_KEY", "portal-signing-key"),
+			Secure:                 getEnvBool("SESSION_SECURE", false),
+			HTTPOnly:               getEnvBool("SESSION_HTTP_ONLY", true),
+			SameSite:               getEnv("SESSION_SAME_SITE", "Lax"),
+			IdleTimeoutMinutes:     getEnvInt("SESSION_IDLE_TIMEOUT_MINUTES", 15),
+			AbsoluteTimeoutMinutes: getEnvInt("SESSION_ABSOLUTE_TIMEOUT_MINUTES", 480),
+			StateCookieName:        getEnv("SESSION_STATE_COOKIE_NAME", "portal_oidc_state"),
+			NonceCookieName:        getEnv("SESSION_NONCE_COOKIE_NAME", "portal_oidc_nonce"),
+			StateCookieMaxAge:      time.Duration(getEnvInt("SESSION_STATE_COOKIE_MAX_AGE_SECONDS", 300)) * time.Second,
 		},
-		Permission: PermissionConfig{
-			AdminRealmRoles: getEnvSlice("PORTAL_ADMIN_REALM_ROLES", []string{"portal-admin", "realm-admin"}),
+		Sync: SyncConfig{
+			OnLogin:        getEnvBool("SYNC_ON_LOGIN", true),
+			TimeoutSeconds: getEnvInt("SYNC_TIMEOUT_SECONDS", 10),
+		},
+		CORS: CORSConfig{
+			AllowedOrigins: getEnvSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173"}),
 		},
 		Log: LogConfig{
-			Level: getEnv("PORTAL_LOG_LEVEL", "INFO"),
+			Level: getEnv("LOG_LEVEL", "INFO"),
 		},
 	}
 }
 
+// NewLogger returns a structured slog logger.
 func NewLogger(level string) *slog.Logger {
 	var slogLevel slog.Level
 	switch strings.ToUpper(level) {

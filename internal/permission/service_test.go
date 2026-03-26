@@ -3,39 +3,33 @@ package permission
 import (
 	"testing"
 
-	"portal/internal/config"
 	"portal/internal/model"
 )
 
-func TestIsAdmin(t *testing.T) {
-	service := NewService(nil, config.Config{
-		Permission: config.PermissionConfig{
-			AdminRealmRoles: []string{"portal-admin"},
-		},
-	})
-
-	if !service.IsAdmin(model.PortalSession{RealmRoles: []string{"viewer", "portal-admin"}}) {
-		t.Fatalf("expected portal-admin realm role to grant admin access")
+func TestIsPortalAdmin(t *testing.T) {
+	service := NewService(nil)
+	if !service.IsPortalAdmin(model.PortalSession{RealmRoles: []string{"portal_admin"}}) {
+		t.Fatalf("expected portal_admin role to grant admin access")
 	}
 }
 
-func TestClientVisibleToUser(t *testing.T) {
-	service := NewService(nil, config.Config{})
-	client := model.ClientProjection{ClientID: "sales-app"}
+func TestCanViewByClientRoles(t *testing.T) {
+	service := NewService(nil)
+	client := model.ClientProjection{ClientID: "sales-app", Enabled: true}
 	meta := model.PortalClientMeta{
-		ClientID:            "sales-app",
-		RequiredRealmRoles:  []string{"finance-admin"},
-		RequiredClientRoles: []string{"viewer"},
+		ClientID: "sales-app",
+		Visible:  true,
+		AccessRules: model.AccessRules{
+			AnyClientRoles: []string{"viewer"},
+		},
 	}
-
 	session := model.PortalSession{
-		RealmRoles: []string{"employee"},
 		ClientRoles: map[string][]string{
 			"sales-app": {"viewer"},
 		},
 	}
 
-	if !service.clientVisibleToUser(client, meta, true, session) {
-		t.Fatalf("expected client role intersection to grant visibility")
+	if !service.canView(client, meta, session) {
+		t.Fatalf("expected matching client role to grant visibility")
 	}
 }

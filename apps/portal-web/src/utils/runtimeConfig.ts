@@ -11,7 +11,7 @@ declare global {
 
 export function getRuntimeConfig(): RuntimeConfig {
   return {
-    apiBaseUrl: window.__PORTAL_CONFIG__?.apiBaseUrl ?? '/api/v1',
+    apiBaseUrl: window.__PORTAL_CONFIG__?.apiBaseUrl ?? '/api',
     appTitle: window.__PORTAL_CONFIG__?.appTitle ?? 'Portal',
   }
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"portal/internal/config"
 )
 
+// NewStateValue returns a random URL-safe state or nonce value.
 func NewStateValue() (string, error) {
 	buffer := make([]byte, 32)
 	if _, err := rand.Read(buffer); err != nil {
@@ -19,39 +21,39 @@ func NewStateValue() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buffer), nil
 }
 
-func SetTransientCookie(c *gin.Context, cfg config.Config, name, value string, maxAgeSeconds int) {
+// SetTransientCookie writes an OIDC state/nonce cookie.
+func SetTransientCookie(c *gin.Context, cfg config.Config, name, value string, maxAge time.Duration) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
-		MaxAge:   maxAgeSeconds,
-		HttpOnly: true,
-		Secure:   cfg.Server.CookieSecure,
-		Domain:   cfg.Server.CookieDomain,
-		SameSite: sameSite(cfg.Server.CookieSameSite),
-		Expires:  time.Now().Add(time.Duration(maxAgeSeconds) * time.Second),
+		MaxAge:   int(maxAge.Seconds()),
+		HttpOnly: cfg.Session.HTTPOnly,
+		Secure:   cfg.Session.Secure,
+		SameSite: sameSite(cfg.Session.SameSite),
+		Expires:  time.Now().Add(maxAge),
 	})
 }
 
+// ClearCookie clears an OIDC cookie.
 func ClearCookie(c *gin.Context, cfg config.Config, name string) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     name,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   cfg.Server.CookieSecure,
-		Domain:   cfg.Server.CookieDomain,
-		SameSite: sameSite(cfg.Server.CookieSameSite),
+		HttpOnly: cfg.Session.HTTPOnly,
+		Secure:   cfg.Session.Secure,
+		SameSite: sameSite(cfg.Session.SameSite),
 		Expires:  time.Unix(0, 0),
 	})
 }
 
 func sameSite(value string) http.SameSite {
-	switch value {
-	case "Strict":
+	switch strings.ToLower(value) {
+	case "strict":
 		return http.SameSiteStrictMode
-	case "None":
+	case "none":
 		return http.SameSiteNoneMode
 	default:
 		return http.SameSiteLaxMode

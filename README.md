@@ -1,16 +1,24 @@
 # portal
 
-独立部署的 Web 门户，认证与权限唯一事实源为 Keycloak，MongoDB 只保存门户投影与 portal session。
+`portal` is an independently deployed web portal that sits in front of Keycloak.
 
-## 技术栈
+Core boundaries:
 
-- 后端: Go 1.23+, Gin, MongoDB 官方驱动
-- 前端: Vue 3, TypeScript, Vite, Pinia, Vue Router, Element Plus
-- 认证: Keycloak OIDC
-- 权限与同步: Keycloak Admin REST API
-- 部署: Docker Compose + Kubernetes manifests
+- Keycloak is the only identity source, role source, and client source.
+- `portal-api` handles OIDC callback, portal session, Keycloak Admin API access, login-triggered sync, and permission resolution.
+- `portal-web` only calls `portal-api`.
+- MongoDB is a projection store, settings store, and session store. It is not an authentication source.
 
-## 目录
+## Stack
+
+- Go 1.23+
+- Gin
+- MongoDB official Go driver
+- Vue 3 + TypeScript + Vite + Pinia + Vue Router + Element Plus
+- Docker Compose
+- Kubernetes manifests
+
+## Layout
 
 ```text
 portal/
@@ -37,88 +45,114 @@ portal/
   tests/
 ```
 
-## 核心实现
+## Prerequisites
 
-- `portal-web` 和 `portal-api` 独立部署
-- 前端只调用 `portal-api`
-- 未登录时由 `portal-web` 引导到 `portal-api /api/v1/auth/login`
-- Keycloak 回调到 `portal-api /api/v1/auth/callback`
-- `portal-api` 用 OIDC code 换 token 后，立刻调用 Keycloak Admin API 同步:
-  - 当前 realm 基础信息
-  - 当前 realm client 列表
-  - 当前用户基础资料
-  - 当前用户 realm roles
-  - 当前用户 client roles
-- 同步写入 MongoDB 投影后，才创建 `portal_sessions`
-- 默认空闲超时 15 分钟，由 portal 自己控制
-- 退出时先删除 portal session，再跳转 Keycloak logout
+- Linux shell
+- Docker and Docker Compose plugin
+- `make`
+- `jq`
+- `mongosh`
+- Go 1.23+ for local backend development
+- Node 22+ and npm for local frontend development
 
-## 本地启动
+## Environment
 
-1. 复制环境变量:
-
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
-2. 启动整套依赖:
+Edit `.env` if you need different hostnames, ports, or secrets.
 
-```powershell
-./scripts/dev-up.ps1
+## Start the full development stack
+
+```bash
+make dev-start
 ```
 
-3. 访问:
+This does the following:
 
-- Web: [http://localhost:5173](http://localhost:5173)
-- API: [http://localhost:8080](http://localhost:8080)
-- Keycloak: [http://localhost:8081](http://localhost:8081)
-- OpenAPI: [http://localhost:8080/openapi.yaml](http://localhost:8080/openapi.yaml)
+1. Starts MongoDB and Keycloak
+2. Bootstraps the Keycloak realm, clients, roles, and sample users
+3. Ensures Mongo collections and indexes
+4. Starts `portal-api` and `portal-web`
 
-4. 样例 Keycloak 用户:
+## Default URLs
 
-- `portal-admin / Admin123!`
-- `alice / Alice123!`
+- portal-web: `http://localhost:5173`
+- portal-api: `http://localhost:8080`
+- Keycloak: `http://localhost:8081`
+- OpenAPI: `http://localhost:8080/openapi.yaml`
 
-## 主要 API
+## Default Keycloak bootstrap data
 
-- `GET /healthz`
-- `GET /readyz`
-- `GET /api/v1/auth/login`
-- `GET /api/v1/auth/callback`
-- `GET /api/v1/auth/logout`
-- `GET /api/v1/me`
-- `GET /api/v1/apps`
-- `GET /api/v1/admin/client-metas`
-- `PUT /api/v1/admin/client-metas/:clientId`
-- `GET /api/v1/admin/settings`
-- `PUT /api/v1/admin/settings`
+- realm: `portal`
+- OIDC client: `portal-api`
+- admin service-account client: `portal-sync`
+- realm roles: `portal_user`, `portal_admin`
+- admin user: `portal-admin / Admin123!`
+- normal user: `alice / Alice123!`
 
-## Mongo 集合与索引
+## Scripts
 
-- `kc_realms`
-- `kc_clients`
-- `portal_client_meta`
-- `kc_users`
-- `portal_sessions`
-- `portal_settings`
+- `scripts/dev-start.sh`: start the local Docker-based development environment
+- `scripts/keycloak-bootstrap.sh`: idempotently create realm, clients, roles, service-account bindings, and sample users
+- `scripts/init-mongo-indexes.sh`: create required collections and indexes in MongoDB
 
-初始化脚本: [`scripts/init-mongo.js`](scripts/init-mongo.js)
+## API overview
 
-## 文档
+Authentication:
 
-- 架构说明: [`docs/architecture.md`](docs/architecture.md)
-- OpenAPI: [`docs/openapi.yaml`](docs/openapi.yaml)
+- `GET /api/auth/login`
+- `GET /api/auth/callback`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 
-## 测试
+Portal:
 
-- 单元测试:
+- `GET /api/portal/apps`
+- `GET /api/portal/realms`
+- `GET /api/portal/profile`
 
-```powershell
+Admin:
+
+- `GET /api/admin/realms`
+- `GET /api/admin/clients`
+- `PUT /api/admin/clients/:clientId/meta`
+- `GET /api/admin/users/:userId`
+- `GET /api/admin/settings/session`
+- `PUT /api/admin/settings/session`
+- `GET /api/admin/sync-status`
+
+## Local backend run
+
+```bash
+go run ./apps/portal-api
+```
+
+## Local frontend run
+
+```bash
+cd apps/portal-web
+npm install
+npm run dev
+```
+
+## Tests
+
+Unit tests:
+
+```bash
 go test ./...
 ```
 
-- 集成测试骨架:
+Integration test skeletons:
 
-```powershell
+```bash
 go test -tags integration ./tests/integration/...
 ```
+
+## Notes
+
+- The portal idle timeout defaults to 15 minutes and is enforced by `portal-api`, not by changing Keycloak global session timeout.
+- On successful login, `portal-api` synchronizes the current realm, realm clients, current user profile, effective realm roles, and effective client roles before creating the portal session.
+- On logout, the portal deletes its own session first and then redirects the browser to Keycloak logout.

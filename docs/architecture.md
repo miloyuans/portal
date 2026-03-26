@@ -1,31 +1,34 @@
 # Portal Architecture
 
-## Core rules
+## Runtime topology
 
-- `portal-web` and `portal-api` are independently deployed.
-- Keycloak is the only identity and permission source of truth.
-- MongoDB is used only as the portal projection store.
-- Frontend only talks to `portal-api`.
+- Keycloak: identity source, role source, client source
+- portal-api: Go BFF
+- portal-web: Vue SPA
+- MongoDB: projection store, settings store, session store
 
 ## Login flow
 
-1. User enters `portal-web`.
-2. `portal-web` redirects browser to `portal-api /api/v1/auth/login`.
-3. `portal-api` redirects to Keycloak OIDC authorization endpoint.
-4. Keycloak sends the browser back to `portal-api /api/v1/auth/callback`.
-5. `portal-api` exchanges `code` for tokens.
-6. `portal-api` calls Keycloak Admin REST API and synchronizes:
-   - current realm base info
+1. Browser opens `/portal`.
+2. `portal-web` calls `GET /api/auth/me`.
+3. If unauthenticated, `portal-web` redirects browser to `GET /api/auth/login`.
+4. `portal-api` redirects to Keycloak OIDC authorization endpoint.
+5. Keycloak authenticates the user and redirects to `GET /api/auth/callback?code=...`.
+6. `portal-api` exchanges the OIDC code for tokens.
+7. `portal-api` uses `portal-sync` client credentials to call Keycloak Admin API.
+8. `portal-api` synchronizes:
+   - current realm
    - current realm clients
    - current user profile
-   - current user realm roles
-   - current user client roles
-7. Projection data is upserted into MongoDB.
-8. Only after sync completes does `portal-api` create `portal_sessions`.
-9. Browser is redirected back to `portal-web`.
+   - current user effective realm roles
+   - current user effective client roles
+9. `portal-api` upserts Mongo projections.
+10. `portal-api` creates a portal session.
+11. Browser returns to `/portal`.
 
-## Authorization and session
+## Session rules
 
-- Session idle timeout defaults to 15 minutes and is controlled by portal middleware plus the web idle timer.
-- Logout always deletes the portal session first, then redirects to Keycloak logout.
-- Admin page access uses synced realm roles from the current portal session.
+- Portal session idle timeout is controlled by `portal_settings`.
+- Each protected portal-api request refreshes `lastActiveAt`.
+- Portal logout deletes portal session first, then redirects to Keycloak logout.
+- MongoDB is never used as an authentication source.

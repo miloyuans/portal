@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,11 +11,13 @@ import (
 	"portal/internal/model"
 )
 
+// ClientMetaRepository persists portal client metadata.
 type ClientMetaRepository struct {
 	collection *mongo.Collection
 	logger     *slog.Logger
 }
 
+// NewClientMetaRepository creates a ClientMetaRepository.
 func NewClientMetaRepository(db *mongo.Database, logger *slog.Logger) *ClientMetaRepository {
 	return &ClientMetaRepository{
 		collection: db.Collection(ClientMetaCollection),
@@ -24,8 +25,9 @@ func NewClientMetaRepository(db *mongo.Database, logger *slog.Logger) *ClientMet
 	}
 }
 
-func (r *ClientMetaRepository) ListByRealm(ctx context.Context, realm string) ([]model.PortalClientMeta, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"realm": realm}, options.Find().SetSort(bson.D{{Key: "sortOrder", Value: 1}, {Key: "clientId", Value: 1}}))
+// ListByRealm returns all portal client metadata for a realm.
+func (r *ClientMetaRepository) ListByRealm(ctx context.Context, realmID string) ([]model.PortalClientMeta, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{"realmId": realmID}, options.Find().SetSort(bson.D{{Key: "sort", Value: 1}, {Key: "clientId", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -42,22 +44,16 @@ func (r *ClientMetaRepository) ListByRealm(ctx context.Context, realm string) ([
 	return out, cursor.Err()
 }
 
+// Upsert stores portal client metadata.
 func (r *ClientMetaRepository) Upsert(ctx context.Context, meta model.PortalClientMeta) error {
-	now := time.Now().UTC()
-	if meta.CreatedAt.IsZero() {
-		meta.CreatedAt = now
-	}
-	meta.UpdatedAt = now
-
 	_, err := r.collection.UpdateOne(
 		ctx,
-		bson.M{"realm": meta.Realm, "clientId": meta.ClientID},
+		bson.M{"realmId": meta.RealmID, "clientId": meta.ClientID},
 		bson.M{
 			"$set": meta,
 			"$setOnInsert": bson.M{
-				"realm":     meta.Realm,
-				"clientId":  meta.ClientID,
-				"createdAt": meta.CreatedAt,
+				"realmId":  meta.RealmID,
+				"clientId": meta.ClientID,
 			},
 		},
 		options.Update().SetUpsert(true),
@@ -65,23 +61,17 @@ func (r *ClientMetaRepository) Upsert(ctx context.Context, meta model.PortalClie
 	return err
 }
 
+// SeedDefaults inserts metadata only when it does not already exist.
 func (r *ClientMetaRepository) SeedDefaults(ctx context.Context, metas []model.PortalClientMeta) error {
 	if len(metas) == 0 {
 		return nil
 	}
 
 	models := make([]mongo.WriteModel, 0, len(metas))
-	now := time.Now().UTC()
 	for _, meta := range metas {
-		if meta.CreatedAt.IsZero() {
-			meta.CreatedAt = now
-		}
-		meta.UpdatedAt = now
 		models = append(models, mongo.NewUpdateOneModel().
-			SetFilter(bson.M{"realm": meta.Realm, "clientId": meta.ClientID}).
-			SetUpdate(bson.M{
-				"$setOnInsert": meta,
-			}).
+			SetFilter(bson.M{"realmId": meta.RealmID, "clientId": meta.ClientID}).
+			SetUpdate(bson.M{"$setOnInsert": meta}).
 			SetUpsert(true))
 	}
 
@@ -89,7 +79,8 @@ func (r *ClientMetaRepository) SeedDefaults(ctx context.Context, metas []model.P
 	return err
 }
 
-func (r *ClientMetaRepository) Delete(ctx context.Context, realm, clientID string) error {
-	_, err := r.collection.DeleteOne(ctx, bson.M{"realm": realm, "clientId": clientID})
+// Delete removes portal client metadata.
+func (r *ClientMetaRepository) Delete(ctx context.Context, realmID, clientID string) error {
+	_, err := r.collection.DeleteOne(ctx, bson.M{"realmId": realmID, "clientId": clientID})
 	return err
 }

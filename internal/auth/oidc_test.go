@@ -11,10 +11,10 @@ func TestLogoutURLUsesRequestedRedirect(t *testing.T) {
 	client := &OIDCClient{
 		cfg: config.Config{
 			Keycloak: config.KeycloakConfig{
-				BaseURL:           "http://localhost:8081",
-				Realm:             "portal",
-				ClientID:          "portal-api",
-				LogoutRedirectURL: "http://localhost:5173/login",
+				BaseURL:               "http://localhost:8081",
+				Realm:                 "portal",
+				OIDCClientID:          "portal-api",
+				PostLogoutRedirectURL: "http://localhost:5173/login",
 			},
 		},
 	}

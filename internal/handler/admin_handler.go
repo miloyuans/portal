@@ -2,142 +2,150 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"portal/internal/config"
 	"portal/internal/middleware"
 	"portal/internal/model"
 	"portal/internal/repository"
+	"portal/internal/service"
 )
 
+// AdminHandler serves /api/admin endpoints.
 type AdminHandler struct {
-	repos *repository.Repositories
-	cfg   config.Config
+	repos               *repository.Repositories
+	service             *service.AppService
+	defaultIdleTimeout  int
 }
 
-func NewAdminHandler(repos *repository.Repositories, cfg config.Config) *AdminHandler {
+// NewAdminHandler creates an AdminHandler.
+func NewAdminHandler(repos *repository.Repositories, service *service.AppService, defaultIdleTimeout int) *AdminHandler {
 	return &AdminHandler{
-		repos: repos,
-		cfg:   cfg,
+		repos:              repos,
+		service:            service,
+		defaultIdleTimeout: defaultIdleTimeout,
 	}
 }
 
-type upsertClientMetaRequest struct {
-	ClientID            string   `json:"clientId"`
-	DisplayName         string   `json:"displayName"`
-	Description         string   `json:"description"`
-	TargetURL           string   `json:"targetUrl"`
-	Icon                string   `json:"icon"`
-	Category            string   `json:"category"`
-	SortOrder           int      `json:"sortOrder"`
-	Enabled             bool     `json:"enabled"`
-	ShowInPortal        bool     `json:"showInPortal"`
-	RequiredRealmRoles  []string `json:"requiredRealmRoles"`
-	RequiredClientRoles []string `json:"requiredClientRoles"`
-	Tags                []string `json:"tags"`
-}
-
-type updateSettingsRequest struct {
-	IdleTimeoutMinutes int `json:"idleTimeoutMinutes"`
-}
-
-func (h *AdminHandler) ListClientMetas(c *gin.Context) {
-	session := middleware.CurrentSession(c)
-	metas, err := h.repos.ClientMetas.ListByRealm(c.Request.Context(), session.Realm)
+// ListRealms returns projected realms for admin use.
+func (h *AdminHandler) ListRealms(c *gin.Context) {
+	realms, err := h.repos.Realms.List(c.Request.Context())
 	if err != nil {
-		JSONError(c, http.StatusInternalServerError, "CLIENT_META_LIST_FAILED", "failed to load portal client metadata", err.Error())
+		JSONError(c, http.StatusInternalServerError, "REALM_LIST_FAILED", "failed to load realms", err.Error())
 		return
 	}
-	JSONSuccess(c, http.StatusOK, metas)
+	JSONSuccess(c, http.StatusOK, realms)
 }
 
-func (h *AdminHandler) UpsertClientMeta(c *gin.Context) {
+// ListClients returns projected clients merged with portal metadata.
+func (h *AdminHandler) ListClients(c *gin.Context) {
 	session := middleware.CurrentSession(c)
-	var request upsertClientMetaRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid client meta payload", err.Error())
+	clients, err := h.repos.Clients.ListByRealm(c.Request.Context(), session.RealmID)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "CLIENT_LIST_FAILED", "failed to load clients", err.Error())
+		return
+	}
+	metas, err := h.repos.ClientMetas.ListByRealm(c.Request.Context(), session.RealmID)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "CLIENT_META_LIST_FAILED", "failed to load client metadata", err.Error())
 		return
 	}
 
-	clientID := request.ClientID
-	if routeClientID := c.Param("clientId"); routeClientID != "" {
-		clientID = routeClientID
-	}
-	if clientID == "" {
-		JSONError(c, http.StatusBadRequest, "CLIENT_ID_REQUIRED", "clientId is required", nil)
-		return
+	metaByClientID := make(map[string]model.PortalClientMeta, len(metas))
+	for _, meta := range metas {
+		metaByClientID[meta.ClientID] = meta
 	}
 
-	meta := model.PortalClientMeta{
-		Realm:               session.Realm,
-		ClientID:            clientID,
-		DisplayName:         request.DisplayName,
-		Description:         request.Description,
-		TargetURL:           request.TargetURL,
-		Icon:                request.Icon,
-		Category:            request.Category,
-		SortOrder:           request.SortOrder,
-		Enabled:             request.Enabled,
-		ShowInPortal:        request.ShowInPortal,
-		RequiredRealmRoles:  request.RequiredRealmRoles,
-		RequiredClientRoles: request.RequiredClientRoles,
-		Tags:                request.Tags,
-		UpdatedBy:           session.Username,
-		CreatedAt:           time.Now().UTC(),
+	type adminClientRow struct {
+		Client model.ClientProjection  `json:"client"`
+		Meta   *model.PortalClientMeta `json:"meta,omitempty"`
 	}
 
-	if err := h.repos.ClientMetas.Upsert(c.Request.Context(), meta); err != nil {
-		JSONError(c, http.StatusInternalServerError, "CLIENT_META_SAVE_FAILED", "failed to save portal client meta", err.Error())
-		return
+	rows := make([]adminClientRow, 0, len(clients))
+	for _, client := range clients {
+		row := adminClientRow{Client: client}
+		if meta, ok := metaByClientID[client.ClientID]; ok {
+			row.Meta = &meta
+		}
+		rows = append(rows, row)
 	}
-	JSONSuccess(c, http.StatusOK, meta)
+
+	JSONSuccess(c, http.StatusOK, rows)
 }
 
-func (h *AdminHandler) DeleteClientMeta(c *gin.Context) {
+// UpdateClientMeta updates portal client metadata.
+func (h *AdminHandler) UpdateClientMeta(c *gin.Context) {
 	session := middleware.CurrentSession(c)
 	clientID := c.Param("clientId")
 	if clientID == "" {
 		JSONError(c, http.StatusBadRequest, "CLIENT_ID_REQUIRED", "clientId is required", nil)
 		return
 	}
-	if err := h.repos.ClientMetas.Delete(c.Request.Context(), session.Realm, clientID); err != nil {
-		JSONError(c, http.StatusInternalServerError, "CLIENT_META_DELETE_FAILED", "failed to delete portal client meta", err.Error())
+
+	var payload model.PortalClientMeta
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid client meta payload", err.Error())
 		return
 	}
-	JSONSuccess(c, http.StatusOK, gin.H{"deleted": true, "clientId": clientID})
+	payload.RealmID = session.RealmID
+	payload.ClientID = clientID
+
+	if err := h.repos.ClientMetas.Upsert(c.Request.Context(), payload); err != nil {
+		JSONError(c, http.StatusInternalServerError, "CLIENT_META_SAVE_FAILED", "failed to save portal client metadata", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, payload)
 }
 
-func (h *AdminHandler) GetSettings(c *gin.Context) {
+// GetUser returns a projected user.
+func (h *AdminHandler) GetUser(c *gin.Context) {
 	session := middleware.CurrentSession(c)
-	settings, err := h.repos.Settings.GetByRealm(c.Request.Context(), session.Realm, h.cfg.Session.DefaultIdleTimeoutMinutes)
+	userID := c.Param("userId")
+	user, err := h.repos.Users.GetByRealmAndUserID(c.Request.Context(), session.RealmID, userID)
 	if err != nil {
-		JSONError(c, http.StatusInternalServerError, "SETTINGS_LOOKUP_FAILED", "failed to load portal settings", err.Error())
+		JSONError(c, http.StatusNotFound, "USER_NOT_FOUND", "failed to load projected user", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, user)
+}
+
+// GetSessionSettings returns global session settings.
+func (h *AdminHandler) GetSessionSettings(c *gin.Context) {
+	settings, err := h.repos.Settings.GetGlobal(c.Request.Context(), h.defaultIdleTimeout)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "SETTINGS_LOOKUP_FAILED", "failed to load session settings", err.Error())
 		return
 	}
 	JSONSuccess(c, http.StatusOK, settings)
 }
 
-func (h *AdminHandler) UpdateSettings(c *gin.Context) {
-	session := middleware.CurrentSession(c)
-	var request updateSettingsRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid settings payload", err.Error())
+// UpdateSessionSettings updates global session settings.
+func (h *AdminHandler) UpdateSessionSettings(c *gin.Context) {
+	var payload model.PortalSettings
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		JSONError(c, http.StatusBadRequest, "INVALID_REQUEST", "invalid session settings payload", err.Error())
 		return
 	}
-	if request.IdleTimeoutMinutes <= 0 {
-		request.IdleTimeoutMinutes = h.cfg.Session.DefaultIdleTimeoutMinutes
+	if payload.IdleTimeoutMinutes <= 0 {
+		payload.IdleTimeoutMinutes = h.defaultIdleTimeout
+	}
+	if payload.IdleWarnSeconds <= 0 {
+		payload.IdleWarnSeconds = 60
 	}
 
-	settings := model.PortalSettings{
-		Realm:              session.Realm,
-		IdleTimeoutMinutes: request.IdleTimeoutMinutes,
-		CreatedAt:          time.Now().UTC(),
-	}
-	if err := h.repos.Settings.Upsert(c.Request.Context(), settings); err != nil {
-		JSONError(c, http.StatusInternalServerError, "SETTINGS_SAVE_FAILED", "failed to update portal settings", err.Error())
+	if err := h.repos.Settings.UpsertGlobal(c.Request.Context(), payload); err != nil {
+		JSONError(c, http.StatusInternalServerError, "SETTINGS_SAVE_FAILED", "failed to save session settings", err.Error())
 		return
 	}
-	JSONSuccess(c, http.StatusOK, settings)
+	JSONSuccess(c, http.StatusOK, payload)
+}
+
+// SyncStatus returns the latest sync summary for the current admin session.
+func (h *AdminHandler) SyncStatus(c *gin.Context) {
+	status, err := h.service.SyncStatus(c.Request.Context(), middleware.CurrentSession(c), h.defaultIdleTimeout)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "SYNC_STATUS_FAILED", "failed to load sync status", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, status)
 }

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,11 +11,13 @@ import (
 	"portal/internal/model"
 )
 
+// ClientRepository persists client projections.
 type ClientRepository struct {
 	collection *mongo.Collection
 	logger     *slog.Logger
 }
 
+// NewClientRepository creates a ClientRepository.
 func NewClientRepository(db *mongo.Database, logger *slog.Logger) *ClientRepository {
 	return &ClientRepository{
 		collection: db.Collection(ClientsCollection),
@@ -24,21 +25,20 @@ func NewClientRepository(db *mongo.Database, logger *slog.Logger) *ClientReposit
 	}
 }
 
+// UpsertMany stores client projections.
 func (r *ClientRepository) UpsertMany(ctx context.Context, clients []model.ClientProjection) error {
 	if len(clients) == 0 {
 		return nil
 	}
 
-	now := time.Now().UTC()
 	models := make([]mongo.WriteModel, 0, len(clients))
 	for _, client := range clients {
-		client.UpdatedAt = now
 		models = append(models, mongo.NewUpdateOneModel().
-			SetFilter(bson.M{"realm": client.Realm, "clientId": client.ClientID}).
+			SetFilter(bson.M{"realmId": client.RealmID, "clientId": client.ClientID}).
 			SetUpdate(bson.M{
 				"$set": client,
 				"$setOnInsert": bson.M{
-					"realm":    client.Realm,
+					"realmId":  client.RealmID,
 					"clientId": client.ClientID,
 				},
 			}).
@@ -49,8 +49,9 @@ func (r *ClientRepository) UpsertMany(ctx context.Context, clients []model.Clien
 	return err
 }
 
-func (r *ClientRepository) ListByRealm(ctx context.Context, realm string) ([]model.ClientProjection, error) {
-	cursor, err := r.collection.Find(ctx, bson.M{"realm": realm}, options.Find().SetSort(bson.D{{Key: "clientId", Value: 1}}))
+// ListByRealm returns all clients for a realm.
+func (r *ClientRepository) ListByRealm(ctx context.Context, realmID string) ([]model.ClientProjection, error) {
+	cursor, err := r.collection.Find(ctx, bson.M{"realmId": realmID}, options.Find().SetSort(bson.D{{Key: "clientId", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +68,16 @@ func (r *ClientRepository) ListByRealm(ctx context.Context, realm string) ([]mod
 	return out, cursor.Err()
 }
 
-func (r *ClientRepository) GetByRealmAndClientID(ctx context.Context, realm, clientID string) (model.ClientProjection, error) {
+// GetByRealmAndClientID returns a client projection by client ID.
+func (r *ClientRepository) GetByRealmAndClientID(ctx context.Context, realmID, clientID string) (model.ClientProjection, error) {
 	var out model.ClientProjection
-	err := r.collection.FindOne(ctx, bson.M{"realm": realm, "clientId": clientID}).Decode(&out)
+	err := r.collection.FindOne(ctx, bson.M{"realmId": realmID, "clientId": clientID}).Decode(&out)
+	return out, err
+}
+
+// GetByRealmAndClientUUID returns a client projection by client UUID.
+func (r *ClientRepository) GetByRealmAndClientUUID(ctx context.Context, realmID, clientUUID string) (model.ClientProjection, error) {
+	var out model.ClientProjection
+	err := r.collection.FindOne(ctx, bson.M{"realmId": realmID, "clientUuid": clientUUID}).Decode(&out)
 	return out, err
 }

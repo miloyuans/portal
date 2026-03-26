@@ -1,35 +1,28 @@
 services:
   mongo:
     image: mongo:7
-    container_name: portal-mongo
     restart: unless-stopped
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
-      - ../../scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.2
-    container_name: portal-keycloak
     restart: unless-stopped
     command:
       - start-dev
       - --http-port=8080
-      - --import-realm
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin123
+      KEYCLOAK_ADMIN: ${KEYCLOAK_BOOTSTRAP_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
     ports:
       - "8081:8080"
-    volumes:
-      - ./keycloak/portal-realm.json:/opt/keycloak/data/import/portal-realm.json:ro
 
   portal-api:
     build:
       context: ../../
       dockerfile: apps/portal-api/Dockerfile
-    container_name: portal-api
     restart: unless-stopped
     depends_on:
       - mongo
@@ -37,21 +30,15 @@ services:
     env_file:
       - ../../.env
     environment:
-      PORTAL_API_LISTEN_ADDR: :8080
-      PORTAL_PUBLIC_API_URL: http://localhost:8080
-      PORTAL_PUBLIC_WEB_URL: http://localhost:5173
-      PORTAL_ALLOWED_ORIGINS: http://localhost:5173
-      PORTAL_MONGO_URI: mongodb://mongo:27017
-      PORTAL_MONGO_DATABASE: portal
+      APP_ADDR: :8080
+      APP_PUBLIC_URL: http://localhost:8080
+      WEB_PUBLIC_URL: http://localhost:5173
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB: ${MONGO_DB:-portal}
       KEYCLOAK_BASE_URL: http://keycloak:8080
-      KEYCLOAK_REALM: portal
-      KEYCLOAK_ADMIN_REALM: master
-      KEYCLOAK_CLIENT_ID: portal-api
-      KEYCLOAK_CLIENT_SECRET: portal-api-secret
-      KEYCLOAK_ADMIN_USERNAME: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin123
-      KEYCLOAK_REDIRECT_URL: http://localhost:8080/api/v1/auth/callback
-      KEYCLOAK_LOGOUT_REDIRECT_URL: http://localhost:5173/login
+      KEYCLOAK_REDIRECT_URL: http://localhost:8080/api/auth/callback
+      KEYCLOAK_POST_LOGOUT_REDIRECT_URL: http://localhost:5173/login
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
     ports:
       - "8080:8080"
 
@@ -59,12 +46,11 @@ services:
     build:
       context: ../../
       dockerfile: apps/portal-web/Dockerfile
-    container_name: portal-web
     restart: unless-stopped
     depends_on:
       - portal-api
     environment:
-      PORTAL_API_BASE_URL: http://localhost:8080/api/v1
+      PORTAL_API_BASE_URL: http://localhost:8080/api
       PORTAL_APP_TITLE: Portal
     ports:
       - "5173:80"

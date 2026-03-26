@@ -9,11 +9,10 @@ import (
 )
 
 func TestValidateRejectsExpiredSession(t *testing.T) {
-	manager := NewManager(nil, nil, config.Config{})
+	manager := NewManager(nil, config.Config{})
 	session := model.PortalSession{
-		ExpiresAt:          time.Now().UTC().Add(-time.Minute),
-		LastSeenAt:         time.Now().UTC(),
-		IdleTimeoutMinutes: 15,
+		ExpiresAt:         time.Now().UTC().Add(-time.Minute),
+		AbsoluteExpiresAt: time.Now().UTC().Add(time.Hour),
 	}
 
 	if err := manager.Validate(session); err != ErrSessionExpired {
@@ -21,15 +20,14 @@ func TestValidateRejectsExpiredSession(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsIdleTimeout(t *testing.T) {
-	manager := NewManager(nil, nil, config.Config{})
+func TestValidateRejectsAbsoluteExpiration(t *testing.T) {
+	manager := NewManager(nil, config.Config{})
 	session := model.PortalSession{
-		ExpiresAt:          time.Now().UTC().Add(time.Hour),
-		LastSeenAt:         time.Now().UTC().Add(-20 * time.Minute),
-		IdleTimeoutMinutes: 15,
+		ExpiresAt:         time.Now().UTC().Add(time.Hour),
+		AbsoluteExpiresAt: time.Now().UTC().Add(-time.Minute),
 	}
 
 	if err := manager.Validate(session); err != ErrSessionExpired {
-		t.Fatalf("expected idle timeout expiration, got %v", err)
+		t.Fatalf("expected absolute expiration, got %v", err)
 	}
 }

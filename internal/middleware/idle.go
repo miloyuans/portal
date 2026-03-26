@@ -6,10 +6,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"portal/internal/repository"
 	sessionpkg "portal/internal/session"
 )
 
-func IdleTimeout(manager *sessionpkg.Manager) gin.HandlerFunc {
+// IdleTimeout enforces portal idle timeout and refreshes lastActiveAt.
+func IdleTimeout(manager *sessionpkg.Manager, settingsRepo *repository.SettingsRepository, defaultIdleTimeout int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := CurrentSession(c)
 		if err := manager.Validate(session); err != nil {
@@ -23,10 +25,22 @@ func IdleTimeout(manager *sessionpkg.Manager) gin.HandlerFunc {
 			return
 		}
 
-		if err := manager.Touch(c.Request.Context(), session); err != nil {
+		idleTimeoutMinutes := defaultIdleTimeout
+		if settingsRepo != nil {
+			settings, err := settingsRepo.GetGlobal(c.Request.Context(), defaultIdleTimeout)
+			if err != nil {
+				abortJSON(c, http.StatusInternalServerError, "SETTINGS_LOOKUP_FAILED", "failed to load session settings", err.Error())
+				return
+			}
+			idleTimeoutMinutes = settings.IdleTimeoutMinutes
+		}
+
+		refreshed, err := manager.Touch(c.Request.Context(), session, idleTimeoutMinutes)
+		if err != nil {
 			abortJSON(c, http.StatusInternalServerError, "SESSION_TOUCH_FAILED", "failed to refresh portal session", err.Error())
 			return
 		}
+		c.Set(SessionKey, refreshed)
 		c.Next()
 	}
 }

@@ -9,7 +9,7 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 
-ENV PORTAL_API_BASE_URL=http://localhost:8080/api/v1
+ENV PORTAL_API_BASE_URL=http://localhost:8080/api
 ENV PORTAL_APP_TITLE=Portal
 
 COPY apps/portal-web/nginx.conf /etc/nginx/conf.d/default.conf
