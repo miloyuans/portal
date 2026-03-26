@@ -23,6 +23,12 @@ paths:
       responses:
         '302':
           description: Redirect to Keycloak
+  /api/auth/login-url:
+    get:
+      summary: Prepare OIDC login and return the browser redirect URL
+      responses:
+        '200':
+          description: Login URL
   /api/auth/callback:
     get:
       summary: OIDC callback

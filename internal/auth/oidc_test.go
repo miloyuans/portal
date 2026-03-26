@@ -12,6 +12,7 @@ func TestLogoutURLUsesRequestedRedirect(t *testing.T) {
 		cfg: config.Config{
 			Keycloak: config.KeycloakConfig{
 				BaseURL:               "http://localhost:8081",
+				PublicURL:             "http://localhost:8081",
 				Realm:                 "portal",
 				OIDCClientID:          "portal-api",
 				PostLogoutRedirectURL: "http://localhost:5173/login",

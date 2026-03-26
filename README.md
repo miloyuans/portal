@@ -63,6 +63,27 @@ cp .env.example .env
 
 Edit `.env` if you need different hostnames, ports, or secrets.
 
+Recommended browser entry:
+
+- Users open `portal-web` on one public origin, for example `https://portal.example.com`
+- Frontend calls relative `/api/*`
+- Reverse proxy or ingress forwards `/api/*` to `portal-api`
+- `KEYCLOAK_REDIRECT_URL` should also use that same public origin, for example `https://portal.example.com/api/auth/callback`
+
+Important Keycloak URL split:
+
+- `KEYCLOAK_BASE_URL`: internal URL used by `portal-api` for token exchange and Admin API calls
+- `KEYCLOAK_PUBLIC_URL`: browser-facing URL used for login and logout redirects
+
+In Docker Compose local development this usually means:
+
+- `KEYCLOAK_BASE_URL=http://keycloak:8080`
+- `KEYCLOAK_PUBLIC_URL=http://localhost:8081`
+
+And the frontend-facing callback should be:
+
+- `KEYCLOAK_REDIRECT_URL=http://localhost:5173/api/auth/callback`
+
 ## Start the full development stack
 
 ```bash

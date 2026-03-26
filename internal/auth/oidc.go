@@ -49,7 +49,10 @@ func NewOIDCClient(ctx context.Context, cfg config.Config) (*OIDCClient, error) 
 		oauth2: &oauth2.Config{
 			ClientID:     cfg.Keycloak.OIDCClientID,
 			ClientSecret: cfg.Keycloak.OIDCClientSecret,
-			Endpoint:     provider.Endpoint(),
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  oidcAuthorizationURL(cfg),
+				TokenURL: provider.Endpoint().TokenURL,
+			},
 			RedirectURL:  cfg.Keycloak.RedirectURL,
 			Scopes:       cfg.Keycloak.OIDCScopes,
 		},
@@ -109,11 +112,15 @@ func (c *OIDCClient) LogoutURL(idTokenHint string, redirectURI string) string {
 	values.Set("post_logout_redirect_uri", redirectURI)
 	values.Set("client_id", c.cfg.Keycloak.OIDCClientID)
 
-	base := strings.TrimRight(c.cfg.Keycloak.BaseURL, "/") + "/realms/" + c.cfg.Keycloak.Realm + "/protocol/openid-connect/logout"
+	base := strings.TrimRight(c.cfg.Keycloak.PublicURL, "/") + "/realms/" + c.cfg.Keycloak.Realm + "/protocol/openid-connect/logout"
 	return base + "?" + values.Encode()
 }
 
 // Ready reports whether the OIDC provider metadata is initialized.
 func (c *OIDCClient) Ready() bool {
 	return c.provider != nil
+}
+
+func oidcAuthorizationURL(cfg config.Config) string {
+	return strings.TrimRight(cfg.Keycloak.PublicURL, "/") + "/realms/" + cfg.Keycloak.Realm + "/protocol/openid-connect/auth"
 }

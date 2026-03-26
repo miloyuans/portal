@@ -36,7 +36,8 @@ services:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB: ${MONGO_DB:-portal}
       KEYCLOAK_BASE_URL: http://keycloak:8080
-      KEYCLOAK_REDIRECT_URL: http://localhost:8080/api/auth/callback
+      KEYCLOAK_PUBLIC_URL: http://localhost:8081
+      KEYCLOAK_REDIRECT_URL: http://localhost:5173/api/auth/callback
       KEYCLOAK_POST_LOGOUT_REDIRECT_URL: http://localhost:5173/login
       CORS_ALLOWED_ORIGINS: http://localhost:5173
     ports:
@@ -50,7 +51,7 @@ services:
     depends_on:
       - portal-api
     environment:
-      PORTAL_API_BASE_URL: http://localhost:8080/api
+      PORTAL_API_BASE_URL: /api
       PORTAL_APP_TITLE: Portal
     ports:
       - "5173:80"

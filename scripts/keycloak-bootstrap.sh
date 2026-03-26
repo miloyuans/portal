@@ -16,7 +16,7 @@ fi
 : "${KEYCLOAK_OIDC_CLIENT_SECRET:=portal-api-secret}"
 : "${KEYCLOAK_ADMIN_CLIENT_ID:=portal-sync}"
 : "${KEYCLOAK_ADMIN_CLIENT_SECRET:=portal-sync-secret}"
-: "${KEYCLOAK_REDIRECT_URL:=http://localhost:8080/api/auth/callback}"
+: "${KEYCLOAK_REDIRECT_URL:=http://localhost:5173/api/auth/callback}"
 
 require() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing dependency: $1" >&2; exit 1; }
@@ -62,7 +62,10 @@ ensure_realm_role() {
 }
 
 ensure_oidc_client() {
-  if [[ -z "$(client_uuid "${KEYCLOAK_REALM}" "${KEYCLOAK_OIDC_CLIENT_ID}")" ]]; then
+  local oidc_uuid
+  oidc_uuid="$(client_uuid "${KEYCLOAK_REALM}" "${KEYCLOAK_OIDC_CLIENT_ID}")"
+
+  if [[ -z "${oidc_uuid}" ]]; then
     kcadm create clients -r "${KEYCLOAK_REALM}" \
       -s clientId="${KEYCLOAK_OIDC_CLIENT_ID}" \
       -s name="Portal API" \
@@ -72,11 +75,25 @@ ensure_oidc_client() {
       -s standardFlowEnabled=true \
       -s serviceAccountsEnabled=false \
       -s "redirectUris=[\"${KEYCLOAK_REDIRECT_URL}\"]" >/dev/null
+    return
   fi
+
+  kcadm update "clients/${oidc_uuid}" -r "${KEYCLOAK_REALM}" \
+    -s clientId="${KEYCLOAK_OIDC_CLIENT_ID}" \
+    -s name="Portal API" \
+    -s protocol="openid-connect" \
+    -s publicClient=false \
+    -s secret="${KEYCLOAK_OIDC_CLIENT_SECRET}" \
+    -s standardFlowEnabled=true \
+    -s serviceAccountsEnabled=false \
+    -s "redirectUris=[\"${KEYCLOAK_REDIRECT_URL}\"]" >/dev/null
 }
 
 ensure_sync_client() {
-  if [[ -z "$(client_uuid "${KEYCLOAK_REALM}" "${KEYCLOAK_ADMIN_CLIENT_ID}")" ]]; then
+  local sync_uuid
+  sync_uuid="$(client_uuid "${KEYCLOAK_REALM}" "${KEYCLOAK_ADMIN_CLIENT_ID}")"
+
+  if [[ -z "${sync_uuid}" ]]; then
     kcadm create clients -r "${KEYCLOAK_REALM}" \
       -s clientId="${KEYCLOAK_ADMIN_CLIENT_ID}" \
       -s name="Portal Sync" \
@@ -85,7 +102,17 @@ ensure_sync_client() {
       -s secret="${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
       -s standardFlowEnabled=false \
       -s serviceAccountsEnabled=true >/dev/null
+    return
   fi
+
+  kcadm update "clients/${sync_uuid}" -r "${KEYCLOAK_REALM}" \
+    -s clientId="${KEYCLOAK_ADMIN_CLIENT_ID}" \
+    -s name="Portal Sync" \
+    -s protocol="openid-connect" \
+    -s publicClient=false \
+    -s secret="${KEYCLOAK_ADMIN_CLIENT_SECRET}" \
+    -s standardFlowEnabled=false \
+    -s serviceAccountsEnabled=true >/dev/null
 }
 
 ensure_sample_client() {

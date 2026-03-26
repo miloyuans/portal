@@ -8,7 +8,7 @@
         portal-api completes the login sync and creates the portal session.
       </p>
       <div class="portal-toolbar">
-        <el-button type="primary" size="large" @click="sessionStore.goLogin()">Continue to Keycloak</el-button>
+        <el-button type="primary" size="large" @click="onLogin">Continue to Keycloak</el-button>
       </div>
     </div>
   </div>
@@ -24,7 +24,11 @@ const sessionStore = useSessionStore()
 
 onMounted(() => {
   window.setTimeout(() => {
-    sessionStore.goLogin()
+    void sessionStore.goLogin()
   }, 150)
 })
+
+async function onLogin(): Promise<void> {
+  await sessionStore.goLogin()
+}
 </script>

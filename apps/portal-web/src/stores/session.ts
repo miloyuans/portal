@@ -69,8 +69,17 @@ export const useSessionStore = defineStore('session', () => {
     realms.value = response.data.data
   }
 
-  function goLogin(): void {
-    window.location.href = buildApiUrl('/auth/login')
+  async function goLogin(): Promise<void> {
+    try {
+      const response = await apiClient.get<ApiEnvelope<{ loginUrl: string }>>('/auth/login-url')
+      const loginUrl = response.data.data?.loginUrl
+      if (!loginUrl) {
+        throw new Error('missing loginUrl')
+      }
+      window.location.href = loginUrl
+    } catch {
+      window.location.href = buildApiUrl('/auth/login')
+    }
   }
 
   async function logout(reason: 'manual' | 'expired' = 'manual'): Promise<void> {

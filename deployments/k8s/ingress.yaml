@@ -9,6 +9,13 @@ spec:
     - host: portal.example.com
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: portal-api
+                port:
+                  number: 8080
           - path: /
             pathType: Prefix
             backend:
@@ -16,13 +23,3 @@ spec:
                 name: portal-web
                 port:
                   number: 80
-    - host: portal-api.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: portal-api
-                port:
-                  number: 8080

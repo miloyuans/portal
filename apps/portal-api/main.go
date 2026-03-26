@@ -73,6 +73,7 @@ func main() {
 	api := router.Group("/api")
 	{
 		authGroup := api.Group("/auth")
+		authGroup.GET("/login-url", authHandler.LoginURL)
 		authGroup.GET("/login", authHandler.Login)
 		authGroup.GET("/callback", authHandler.Callback)
 

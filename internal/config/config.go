@@ -44,6 +44,7 @@ type MongoConfig struct {
 // KeycloakConfig stores OIDC and Admin API configuration.
 type KeycloakConfig struct {
 	BaseURL                 string
+	PublicURL               string
 	Realm                   string
 	OIDCClientID            string
 	OIDCClientSecret        string
@@ -87,6 +88,9 @@ type LogConfig struct {
 
 // MustLoad loads configuration from environment variables.
 func MustLoad() Config {
+	keycloakBaseURL := strings.TrimRight(getEnv("KEYCLOAK_BASE_URL", "http://localhost:8081"), "/")
+	keycloakPublicURL := strings.TrimRight(getEnv("KEYCLOAK_PUBLIC_URL", keycloakBaseURL), "/")
+
 	return Config{
 		App: AppConfig{
 			Name: getEnv("APP_NAME", "portal"),
@@ -104,7 +108,8 @@ func MustLoad() Config {
 			ConnectTimeout: time.Duration(getEnvInt("MONGO_CONNECT_TIMEOUT_SECONDS", 10)) * time.Second,
 		},
 		Keycloak: KeycloakConfig{
-			BaseURL:               strings.TrimRight(getEnv("KEYCLOAK_BASE_URL", "http://localhost:8081"), "/"),
+			BaseURL:               keycloakBaseURL,
+			PublicURL:             keycloakPublicURL,
 			Realm:                 getEnv("KEYCLOAK_REALM", "portal"),
 			OIDCClientID:          getEnv("KEYCLOAK_OIDC_CLIENT_ID", "portal-api"),
 			OIDCClientSecret:      getEnv("KEYCLOAK_OIDC_CLIENT_SECRET", "portal-api-secret"),

@@ -40,20 +40,39 @@ func NewAuthHandler(cfg config.Config, oidc *auth.OIDCClient, syncService *syncs
 
 // Login starts the OIDC browser login flow.
 func (h *AuthHandler) Login(c *gin.Context) {
+	loginURL, err := h.prepareLogin(c)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "LOGIN_PREPARE_FAILED", "failed to prepare oidc login", err.Error())
+		return
+	}
+	c.Redirect(http.StatusFound, loginURL)
+}
+
+// LoginURL prepares the OIDC login flow and returns the Keycloak authorization URL.
+func (h *AuthHandler) LoginURL(c *gin.Context) {
+	loginURL, err := h.prepareLogin(c)
+	if err != nil {
+		JSONError(c, http.StatusInternalServerError, "LOGIN_PREPARE_FAILED", "failed to prepare oidc login", err.Error())
+		return
+	}
+	JSONSuccess(c, http.StatusOK, gin.H{
+		"loginUrl": loginURL,
+	})
+}
+
+func (h *AuthHandler) prepareLogin(c *gin.Context) (string, error) {
 	state, err := auth.NewStateValue()
 	if err != nil {
-		JSONError(c, http.StatusInternalServerError, "STATE_GENERATION_FAILED", "failed to generate oidc state", err.Error())
-		return
+		return "", err
 	}
 	nonce, err := auth.NewStateValue()
 	if err != nil {
-		JSONError(c, http.StatusInternalServerError, "NONCE_GENERATION_FAILED", "failed to generate oidc nonce", err.Error())
-		return
+		return "", err
 	}
 
 	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.StateCookieName, state, h.cfg.Session.StateCookieMaxAge)
 	auth.SetTransientCookie(c, h.cfg, h.cfg.Session.NonceCookieName, nonce, h.cfg.Session.StateCookieMaxAge)
-	c.Redirect(http.StatusFound, h.oidc.AuthCodeURL(state, nonce))
+	return h.oidc.AuthCodeURL(state, nonce), nil
 }
 
 // Callback handles the OIDC authorization code callback.
