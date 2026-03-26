@@ -24,7 +24,7 @@ db.kc_users.createIndex({ realmId: 1, userId: 1 }, { unique: true, name: 'ux_rea
 db.kc_users.createIndex({ realmId: 1, username: 1 }, { unique: true, name: 'ux_realm_username' });
 db.portal_sessions.createIndex({ sessionId: 1 }, { unique: true, name: 'ux_session_id' });
 db.portal_sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl_expires_at' });
-db.portal_settings.createIndex({ _id: 1 }, { unique: true, name: 'ux_settings_id' });
+db.portal_settings.createIndex({ _id: 1 }, { name: 'ix_settings_id' });
 
 db.portal_settings.updateOne(
   { _id: 'global' },

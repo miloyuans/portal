@@ -113,7 +113,7 @@ func (m *Mongo) EnsureIndexes(ctx context.Context) error {
 		{
 			collection: SettingsCollection,
 			models: []mongo.IndexModel{
-				{Keys: bson.D{{Key: "_id", Value: 1}}, Options: options.Index().SetUnique(true).SetName("ux_settings_id")},
+				{Keys: bson.D{{Key: "_id", Value: 1}}, Options: options.Index().SetName("ix_settings_id")},
 			},
 		},
 	}
