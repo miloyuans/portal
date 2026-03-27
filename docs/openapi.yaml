@@ -53,6 +53,22 @@ paths:
       responses:
         '200':
           description: App list
+  /api/portal/apps/{clientId}/launch:
+    get:
+      summary: Resolve the final launch target for a visible app
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Launch target
+        '403':
+          description: App not visible for current session
+        '409':
+          description: App visible but launch disabled or target missing
   /api/portal/realms:
     get:
       summary: Projected realms

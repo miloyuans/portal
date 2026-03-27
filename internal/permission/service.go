@@ -2,11 +2,23 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sort"
 
+	"go.mongodb.org/mongo-driver/mongo"
+
 	"portal/internal/model"
 	"portal/internal/repository"
+)
+
+var (
+	// ErrAppNotVisible indicates the current session cannot see the requested app.
+	ErrAppNotVisible = errors.New("portal app not visible")
+	// ErrLaunchDisabled indicates the app is visible but intentionally not launchable.
+	ErrLaunchDisabled = errors.New("portal app launch disabled")
+	// ErrLaunchTargetMissing indicates the app is visible but has no launch target.
+	ErrLaunchTargetMissing = errors.New("portal app launch target missing")
 )
 
 // Service resolves portal visibility and admin access rules.
@@ -48,27 +60,18 @@ func (s *Service) ResolveApps(ctx context.Context, session model.PortalSession) 
 	var sortable []sortableApp
 	for _, client := range clients {
 		meta, ok := metaByClientID[client.ClientID]
-		if !ok || !client.Enabled || !meta.Visible {
+		if !ok {
 			continue
 		}
 
-		canView := s.canView(client, meta, session)
-		if !canView {
+		view, visible := s.buildAppView(client, meta, session)
+		if !visible {
 			continue
 		}
 
 		sortable = append(sortable, sortableApp{
 			sort: meta.Sort,
-			view: model.PortalAppView{
-				ClientID:    client.ClientID,
-				DisplayName: firstNonEmpty(meta.DisplayName, client.Name, client.ClientID),
-				Category:    meta.Category,
-				Icon:        meta.Icon,
-				LaunchURL:   firstNonEmpty(meta.LaunchURL, client.BaseURL, client.RootURL),
-				CanView:     true,
-				CanLaunch:   true,
-				CanAdmin:    s.canAdmin(meta, session),
-			},
+			view: view,
 		})
 	}
 
@@ -87,6 +90,65 @@ func (s *Service) ResolveApps(ctx context.Context, session model.PortalSession) 
 		apps = append(apps, item.view)
 	}
 	return apps, nil
+}
+
+// ResolveLaunch returns the final app launch target using only projected Mongo data.
+func (s *Service) ResolveLaunch(ctx context.Context, session model.PortalSession, clientID string) (model.PortalLaunchView, error) {
+	client, err := s.repos.Clients.GetByRealmAndClientID(ctx, session.RealmID, clientID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return model.PortalLaunchView{}, ErrAppNotVisible
+		}
+		return model.PortalLaunchView{}, err
+	}
+
+	meta, err := s.repos.ClientMetas.GetByRealmAndClientID(ctx, session.RealmID, clientID)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return model.PortalLaunchView{}, ErrAppNotVisible
+		}
+		return model.PortalLaunchView{}, err
+	}
+
+	view, visible := s.buildAppView(client, meta, session)
+	if !visible {
+		return model.PortalLaunchView{}, ErrAppNotVisible
+	}
+	if !view.CanLaunch {
+		if model.NormalizeLaunchMode(meta.LaunchMode) == model.LaunchModeDisabled {
+			return model.PortalLaunchView{}, ErrLaunchDisabled
+		}
+		return model.PortalLaunchView{}, ErrLaunchTargetMissing
+	}
+
+	return model.PortalLaunchView{
+		ClientID:    view.ClientID,
+		DisplayName: view.DisplayName,
+		LaunchMode:  view.LaunchMode,
+		LaunchURL:   view.LaunchURL,
+	}, nil
+}
+
+func (s *Service) buildAppView(client model.ClientProjection, meta model.PortalClientMeta, session model.PortalSession) (model.PortalAppView, bool) {
+	if !s.canView(client, meta, session) {
+		return model.PortalAppView{}, false
+	}
+
+	launchMode := model.NormalizeLaunchMode(meta.LaunchMode)
+	launchURL := resolveLaunchURL(client, meta)
+	canLaunch := launchMode != model.LaunchModeDisabled && launchURL != ""
+
+	return model.PortalAppView{
+		ClientID:    client.ClientID,
+		DisplayName: firstNonEmpty(meta.DisplayName, client.Name, client.ClientID),
+		Category:    meta.Category,
+		Icon:        meta.Icon,
+		LaunchMode:  launchMode,
+		LaunchURL:   launchURL,
+		CanView:     true,
+		CanLaunch:   canLaunch,
+		CanAdmin:    s.canAdmin(meta, session),
+	}, true
 }
 
 func (s *Service) canView(client model.ClientProjection, meta model.PortalClientMeta, session model.PortalSession) bool {
@@ -128,4 +190,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func resolveLaunchURL(client model.ClientProjection, meta model.PortalClientMeta) string {
+	switch model.NormalizeLaunchMode(meta.LaunchMode) {
+	case model.LaunchModeDisabled:
+		return ""
+	case model.LaunchModeDirect, model.LaunchModeSPInitiated:
+		return firstNonEmpty(meta.LaunchURL, meta.LaunchConfig["launchUrl"], client.BaseURL, client.RootURL)
+	default:
+		return ""
+	}
 }

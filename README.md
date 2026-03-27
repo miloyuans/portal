@@ -153,6 +153,7 @@ Authentication:
 Portal:
 
 - `GET /api/portal/apps`
+- `GET /api/portal/apps/:clientId/launch`
 - `GET /api/portal/realms`
 - `GET /api/portal/profile`
 
@@ -198,4 +199,6 @@ go test -tags integration ./tests/integration/...
 
 - The portal idle timeout defaults to 15 minutes and is enforced by `portal-api`, not by changing Keycloak global session timeout.
 - On successful login, `portal-api` synchronizes the current realm, realm clients, current user profile, effective realm roles, and effective client roles before creating the portal session.
+- Portal navigation and app launch are projection-driven. `portal-web` first asks `portal-api` to resolve `/api/portal/apps/:clientId/launch`, and `portal-api` decides the final target from Mongo metadata plus projected Keycloak roles.
+- This lets portal keep serving projected navigation and runtime authorization from Mongo when Keycloak is temporarily unavailable. Fresh OIDC login still needs Keycloak because Keycloak remains the only authentication source.
 - On logout, the portal deletes its own session first and then redirects the browser to Keycloak logout.

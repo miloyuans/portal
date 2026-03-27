@@ -87,6 +87,7 @@ func main() {
 		protectedPortal.Use(middleware.Session(sessionManager))
 		protectedPortal.Use(middleware.IdleTimeout(sessionManager, repos.Settings, cfg.Session.IdleTimeoutMinutes))
 		protectedPortal.GET("/apps", portalHandler.Apps)
+		protectedPortal.GET("/apps/:clientId/launch", portalHandler.Launch)
 		protectedPortal.GET("/realms", portalHandler.Realms)
 		protectedPortal.GET("/profile", portalHandler.Profile)
 

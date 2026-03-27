@@ -64,7 +64,8 @@ export interface PortalAppView {
   displayName: string
   category?: string
   icon?: string
-  launchUrl: string
+  launchMode: string
+  launchUrl?: string
   canView: boolean
   canLaunch: boolean
   canAdmin: boolean
@@ -83,9 +84,18 @@ export interface PortalClientMeta {
   icon?: string
   category?: string
   sort: number
+  launchMode?: string
   launchUrl?: string
+  launchConfig?: Record<string, string>
   visible: boolean
   accessRules?: AccessRules
+}
+
+export interface PortalLaunchView {
+  clientId: string
+  displayName: string
+  launchMode: string
+  launchUrl: string
 }
 
 export interface AdminClientRow {

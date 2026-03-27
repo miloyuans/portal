@@ -89,6 +89,13 @@ func (h *AdminHandler) UpdateClientMeta(c *gin.Context) {
 	}
 	payload.RealmID = session.RealmID
 	payload.ClientID = clientID
+	if payload.DisplayName == "" {
+		payload.DisplayName = clientID
+	}
+	payload.LaunchMode = model.NormalizeLaunchMode(payload.LaunchMode)
+	if len(payload.AccessRules.AdminRealmRoles) == 0 {
+		payload.AccessRules.AdminRealmRoles = []string{"portal_admin"}
+	}
 
 	if err := h.repos.ClientMetas.Upsert(c.Request.Context(), payload); err != nil {
 		JSONError(c, http.StatusInternalServerError, "CLIENT_META_SAVE_FAILED", "failed to save portal client metadata", err.Error())

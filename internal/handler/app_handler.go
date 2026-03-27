@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
 	"portal/internal/middleware"
+	"portal/internal/permission"
 	"portal/internal/service"
 )
 
@@ -31,6 +33,31 @@ func (h *PortalHandler) Apps(c *gin.Context) {
 		return
 	}
 	JSONSuccess(c, http.StatusOK, apps)
+}
+
+// Launch returns the final launch target for a visible app.
+func (h *PortalHandler) Launch(c *gin.Context) {
+	clientID := c.Param("clientId")
+	if clientID == "" {
+		JSONError(c, http.StatusBadRequest, "CLIENT_ID_REQUIRED", "clientId is required", nil)
+		return
+	}
+
+	launch, err := h.service.Launch(c.Request.Context(), middleware.CurrentSession(c), clientID)
+	if err != nil {
+		switch {
+		case errors.Is(err, permission.ErrAppNotVisible):
+			JSONError(c, http.StatusForbidden, "APP_NOT_VISIBLE", "the requested app is not visible for the current session", nil)
+		case errors.Is(err, permission.ErrLaunchDisabled):
+			JSONError(c, http.StatusConflict, "APP_LAUNCH_DISABLED", "the requested app is visible but launch is disabled", nil)
+		case errors.Is(err, permission.ErrLaunchTargetMissing):
+			JSONError(c, http.StatusConflict, "APP_LAUNCH_TARGET_MISSING", "the requested app has no launch target configured", nil)
+		default:
+			JSONError(c, http.StatusInternalServerError, "APP_LAUNCH_FAILED", "failed to resolve app launch target", err.Error())
+		}
+		return
+	}
+	JSONSuccess(c, http.StatusOK, launch)
 }
 
 // Realms returns projected realms.

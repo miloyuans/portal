@@ -44,6 +44,13 @@ func (r *ClientMetaRepository) ListByRealm(ctx context.Context, realmID string) 
 	return out, cursor.Err()
 }
 
+// GetByRealmAndClientID returns portal metadata for a single client.
+func (r *ClientMetaRepository) GetByRealmAndClientID(ctx context.Context, realmID, clientID string) (model.PortalClientMeta, error) {
+	var out model.PortalClientMeta
+	err := r.collection.FindOne(ctx, bson.M{"realmId": realmID, "clientId": clientID}).Decode(&out)
+	return out, err
+}
+
 // Upsert stores portal client metadata.
 func (r *ClientMetaRepository) Upsert(ctx context.Context, meta model.PortalClientMeta) error {
 	_, err := r.collection.UpdateOne(

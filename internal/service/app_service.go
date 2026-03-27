@@ -32,6 +32,11 @@ func (s *AppService) Apps(ctx context.Context, session model.PortalSession) ([]m
 	return s.permissions.ResolveApps(ctx, session)
 }
 
+// Launch resolves the final app launch target for the current session.
+func (s *AppService) Launch(ctx context.Context, session model.PortalSession, clientID string) (model.PortalLaunchView, error) {
+	return s.permissions.ResolveLaunch(ctx, session, clientID)
+}
+
 // Profile returns the current user's projected profile.
 func (s *AppService) Profile(ctx context.Context, session model.PortalSession, defaultIdleTimeout int) (model.CurrentUserProfile, error) {
 	user, err := s.repos.Users.GetByRealmAndUserID(ctx, session.RealmID, session.UserID)
